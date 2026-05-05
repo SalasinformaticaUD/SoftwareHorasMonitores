@@ -1,0 +1,53 @@
+{% if page_obj and page_obj.paginator.num_pages > 1 %}
+  <nav aria-label="Paginación" class="mt-3">
+    <ul class="pagination pagination-sm flex-wrap mb-0">
+      <li class="page-item {% if not page_obj.has_previous %}disabled{% endif %}">
+        <a
+          class="page-link"
+          href="?{% if page_query %}{{ page_query }}&{% endif %}{{ page_param }}=1"
+          {% if not page_obj.has_previous %}tabindex="-1" aria-disabled="true"{% endif %}
+        >
+          Primera
+        </a>
+      </li>
+      <li class="page-item {% if not page_obj.has_previous %}disabled{% endif %}">
+        <a
+          class="page-link"
+          href="?{% if page_query %}{{ page_query }}&{% endif %}{{ page_param }}={% if page_obj.has_previous %}{{ page_obj.previous_page_number }}{% else %}1{% endif %}"
+          {% if not page_obj.has_previous %}tabindex="-1" aria-disabled="true"{% endif %}
+        >
+          Anterior
+        </a>
+      </li>
+
+      {% for page_number in page_obj.paginator.page_range %}
+        {% if page_number >= page_obj.number|add:"-2" and page_number <= page_obj.number|add:"2" %}
+          <li class="page-item {% if page_number == page_obj.number %}active{% endif %}">
+            <a class="page-link" href="?{% if page_query %}{{ page_query }}&{% endif %}{{ page_param }}={{ page_number }}">
+              {{ page_number }}
+            </a>
+          </li>
+        {% endif %}
+      {% endfor %}
+
+      <li class="page-item {% if not page_obj.has_next %}disabled{% endif %}">
+        <a
+          class="page-link"
+          href="?{% if page_query %}{{ page_query }}&{% endif %}{{ page_param }}={% if page_obj.has_next %}{{ page_obj.next_page_number }}{% else %}{{ page_obj.paginator.num_pages }}{% endif %}"
+          {% if not page_obj.has_next %}tabindex="-1" aria-disabled="true"{% endif %}
+        >
+          Siguiente
+        </a>
+      </li>
+      <li class="page-item {% if not page_obj.has_next %}disabled{% endif %}">
+        <a
+          class="page-link"
+          href="?{% if page_query %}{{ page_query }}&{% endif %}{{ page_param }}={{ page_obj.paginator.num_pages }}"
+          {% if not page_obj.has_next %}tabindex="-1" aria-disabled="true"{% endif %}
+        >
+          Última
+        </a>
+      </li>
+    </ul>
+  </nav>
+{% endif %}

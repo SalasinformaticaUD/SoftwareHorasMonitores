@@ -1,0 +1,202 @@
+﻿{% extends "base.html" %}
+{% load common_extras %}
+
+{% block title %}Consulta pública{% endblock %}
+
+{% block content %}
+<style>
+  .lookup-stat-card {
+    height: 100%;
+  }
+
+  .lookup-stat-label {
+    display: block;
+    font-size: 0.8rem;
+    color: #6c757d;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .lookup-stat-value {
+    font-size: 1.35rem;
+    font-weight: 700;
+    line-height: 1.1;
+  }
+
+  .lookup-history-table thead th {
+    white-space: nowrap;
+    vertical-align: middle;
+  }
+
+  .lookup-history-table tbody td {
+    vertical-align: middle;
+  }
+
+  .lookup-history-help {
+    font-size: 0.82rem;
+    color: #6c757d;
+    line-height: 1.45;
+  }
+</style>
+<div class="row g-4">
+  <div class="col-lg-4">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h1 class="h4 mb-3">Consulta pública de horas</h1>
+        <form method="post">
+          {% csrf_token %}
+          {{ form.as_p }}
+          <button class="btn btn-primary" type="submit">Consultar</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-8">
+    {% if result %}
+      <div class="card shadow-sm mb-4">
+        <div class="card-body">
+          <h2 class="h5">{{ result.monitor.full_name }}</h2>
+          <p class="mb-1">Código: {{ result.monitor.codigo_estudiante }}</p>
+          <p class="mb-0">Dependencia: {{ result.monitor.get_department_display }}</p>
+        </div>
+      </div>
+      <div class="row g-3">
+        <div class="col-md-4">
+          <div class="card shadow-sm lookup-stat-card">
+            <div class="card-body">
+              <span class="lookup-stat-label">Horas turno (h)</span>
+              <div class="lookup-stat-value">{{ result.metrics.normal_minutes|minutes_to_hours }}</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card shadow-sm lookup-stat-card">
+            <div class="card-body">
+              <span class="lookup-stat-label">Horas extra aprobadas (h)</span>
+              <div class="lookup-stat-value">{{ result.metrics.approved_overtime_minutes|minutes_to_hours }}</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card shadow-sm lookup-stat-card border-primary-subtle">
+            <div class="card-body">
+              <span class="lookup-stat-label">Total de horas (h)</span>
+              <div class="lookup-stat-value text-primary">{{ result.metrics.net_total_minutes|minutes_to_hours }}</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card shadow-sm lookup-stat-card">
+            <div class="card-body">
+              <span class="lookup-stat-label">Horas extra por aprobar (h)</span>
+              <div class="lookup-stat-value">{{ result.metrics.pending_overtime_minutes|minutes_to_hours }}</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card shadow-sm lookup-stat-card">
+            <div class="card-body">
+              <span class="lookup-stat-label">Anotaciones (h)</span>
+              <div class="lookup-stat-value">{{ result.metrics.annotation_delta_minutes|minutes_to_hours }}</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card shadow-sm lookup-stat-card border-warning-subtle">
+            <div class="card-body">
+              <span class="lookup-stat-label">Faltan para 192 h</span>
+              <div class="lookup-stat-value text-warning-emphasis">{{ result.metrics.remaining_minutes|minutes_to_hours }}</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-2">
+          <div class="card shadow-sm lookup-stat-card">
+            <div class="card-body">
+              <span class="lookup-stat-label">Retrasos</span>
+              <div class="lookup-stat-value">{{ result.metrics.late_count }}</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-2">
+          <div class="card shadow-sm lookup-stat-card">
+            <div class="card-body">
+              <span class="lookup-stat-label">Memorando</span>
+              <div class="lookup-stat-value">{% if result.metrics.has_memorandum %}Sí{% else %}No{% endif %}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="card shadow-sm mt-4">
+        <div class="card-body">
+          <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-2 mb-3">
+            <div>
+              <h3 class="h5 mb-1">Historial reciente</h3>
+              <p class="text-muted mb-0">Resumen de las sesiones más recientes registradas para este monitor.</p>
+            </div>
+          </div>
+          <div class="lookup-history-help border rounded bg-light px-3 py-2 mb-3">
+            <strong>Guía rápida:</strong>
+            `Entrada` y `Salida` muestran la hora exacta registrada;
+            `Normales` son horas dentro del turno;
+            `Extra` son horas fuera del turno;
+            `Anotaciones` corresponden a ajustes manuales de horas;
+            `Retraso` es tardanza frente al inicio esperado.
+            Si aparece `Exento`, hubo una excepción activa y ese retardo no se contó.
+          </div>
+          <div class="table-responsive">
+            <table class="table table-sm table-hover lookup-history-table">
+              <thead>
+                <tr class="table-light">
+                  <th>Fecha</th>
+                  <th>Entrada</th>
+                  <th>Salida</th>
+                  <th>Normales (h)</th>
+                  <th>Extra (h)</th>
+                  <th>Retraso (h)</th>
+                  <th>Estado extra</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for session in result.recent_sessions %}
+                  <tr>
+                    <td><strong>{{ session.work_day }}</strong></td>
+                    <td class="text-center">{{ session.actual_start|time:"H:i:s" }}</td>
+                    <td class="text-center">{{ session.actual_end|time:"H:i:s" }}</td>
+                    <td class="text-center">{{ session.normal_minutes|minutes_to_hours }}</td>
+                    <td class="text-center">{{ session.overtime_minutes|minutes_to_hours }}</td>
+                    <td class="text-center">
+                      {{ session.late_minutes|minutes_to_hours }}
+                      {% if session.lateness_excused %}
+                        <div><span class="badge text-bg-info mt-1">Exento</span></div>
+                      {% endif %}
+                    </td>
+                    <td>
+                      {% if session.overtime_status == "approved" %}
+                        <span class="badge text-bg-success">{{ session.get_overtime_status_display }}</span>
+                      {% elif session.overtime_status == "pending" %}
+                        <span class="badge text-bg-warning">{{ session.get_overtime_status_display }}</span>
+                      {% elif session.overtime_status == "rejected" %}
+                        <span class="badge text-bg-danger">{{ session.get_overtime_status_display }}</span>
+                      {% else %}
+                        <span class="badge text-bg-secondary">{{ session.get_overtime_status_display }}</span>
+                      {% endif %}
+                      {% if session.overtime_auto_approved and session.overtime_exception %}
+                        <div class="small text-muted mt-1">Extra: {{ session.overtime_exception.name }}</div>
+                      {% endif %}
+                      {% if session.lateness_excused and session.lateness_exception %}
+                        <div class="small text-muted mt-1">Retraso: {{ session.lateness_exception.name }}</div>
+                      {% endif %}
+                    </td>
+                  </tr>
+                {% empty %}
+                  <tr><td class="text-center text-muted py-4" colspan="7">Sin historial.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

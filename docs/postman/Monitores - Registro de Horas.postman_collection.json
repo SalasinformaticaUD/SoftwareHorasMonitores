@@ -1,0 +1,470 @@
+{
+  "info": {
+    "_postman_id": "f36631ab-73f0-4fb9-8acd-b25397839fd8",
+    "name": "Monitores - Registro de Horas",
+    "description": "Colección para importar asistencia, conciliar registros y validar si las horas quedaron bien calculadas.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000"
+    },
+    {
+      "key": "username",
+      "value": "admin"
+    },
+    {
+      "key": "password",
+      "value": "ChangeMe123!"
+    },
+    {
+      "key": "monitor_id",
+      "value": ""
+    },
+    {
+      "key": "raw_record_id",
+      "value": ""
+    },
+    {
+      "key": "session_id",
+      "value": ""
+    },
+    {
+      "key": "import_job_id",
+      "value": ""
+    },
+    {
+      "key": "codigo_estudiante",
+      "value": ""
+    },
+    {
+      "key": "department",
+      "value": "physics"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Auth",
+      "item": [
+        {
+          "name": "API Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/login/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login",
+                ""
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('login ok', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "const body = pm.response.json();",
+                  "if (body && body.department) {",
+                  "    pm.collectionVariables.set('department', body.department);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "API Me",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/me/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "me",
+                ""
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Reference Data",
+      "item": [
+        {
+          "name": "List Monitors",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/monitors/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "monitors",
+                ""
+              ]
+            },
+            "description": "Úsalo para obtener un `monitor_id` y confirmar el `codigo_estudiante` del monitor a validar."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('monitors list ok', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "const body = pm.response.json();",
+                  "if (Array.isArray(body) && body.length > 0) {",
+                  "    if (!pm.collectionVariables.get('monitor_id')) pm.collectionVariables.set('monitor_id', body[0].id);",
+                  "    if (!pm.collectionVariables.get('codigo_estudiante')) pm.collectionVariables.set('codigo_estudiante', body[0].codigo_estudiante);",
+                  "    if (!pm.collectionVariables.get('department')) pm.collectionVariables.set('department', body[0].department);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Schedules",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/schedules/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "schedules",
+                ""
+              ]
+            },
+            "description": "Confirma el horario esperado del monitor antes de validar las horas calculadas."
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Attendance Import",
+      "item": [
+        {
+          "name": "Upload Attendance Excel",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "source_file",
+                  "type": "file",
+                  "src": ""
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/attendance/imports/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "attendance",
+                "imports",
+                ""
+              ]
+            },
+            "description": "Sube el Excel de asistencia. Debes seleccionar manualmente el archivo en Postman."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('attendance import request accepted', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+                  "});",
+                  "const body = pm.response.json();",
+                  "if (body && body.id) {",
+                  "    pm.collectionVariables.set('import_job_id', body.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Import Jobs",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/attendance/imports/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "attendance",
+                "imports",
+                ""
+              ]
+            },
+            "description": "Comprueba que el lote de importación terminó y revisa contadores."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('import jobs list ok', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "const body = pm.response.json();",
+                  "if (Array.isArray(body) && body.length > 0 && !pm.collectionVariables.get('import_job_id')) {",
+                  "    pm.collectionVariables.set('import_job_id', body[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4. Reconciliation",
+      "item": [
+        {
+          "name": "List Pending Reconciliation",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/attendance/pending-reconciliation/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "attendance",
+                "pending-reconciliation",
+                ""
+              ]
+            },
+            "description": "Si hay registros aquí, no pudieron asociarse automáticamente al monitor."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('pending reconciliation list ok', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "const body = pm.response.json();",
+                  "if (Array.isArray(body) && body.length > 0 && !pm.collectionVariables.get('raw_record_id')) {",
+                  "    pm.collectionVariables.set('raw_record_id', body[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Assign Monitor To Raw Record",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"monitor_id\": \"{{monitor_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/attendance/pending-reconciliation/{{raw_record_id}}/assign-monitor/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "attendance",
+                "pending-reconciliation",
+                "{{raw_record_id}}",
+                "assign-monitor",
+                ""
+              ]
+            },
+            "description": "Usa esta request solo si hubo conciliación manual pendiente. Al asignar, también se genera la sesión."
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Work Sessions",
+      "item": [
+        {
+          "name": "List Work Sessions",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/sessions/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sessions",
+                ""
+              ]
+            },
+            "description": "Aquí validas si las horas quedaron bien calculadas."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('sessions list ok', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "const body = pm.response.json();",
+                  "if (Array.isArray(body) && body.length > 0 && !pm.collectionVariables.get('session_id')) {",
+                  "    pm.collectionVariables.set('session_id', body[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Review Overtime Approve",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"decision\": \"approve\",\n  \"note\": \"Aprobado desde Postman\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/sessions/{{session_id}}/review-overtime/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sessions",
+                "{{session_id}}",
+                "review-overtime",
+                ""
+              ]
+            },
+            "description": "Opcional. Sirve para comprobar cómo cambia el estado de horas extra."
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Reporting Validation",
+      "item": [
+        {
+          "name": "Dashboard Summary",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/dashboard/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reports",
+                "dashboard",
+                ""
+              ]
+            },
+            "description": "Resumen agregado para validar normales, extras, pendientes y penalizaciones."
+          }
+        },
+        {
+          "name": "Public Monitor Lookup",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/reports/public-monitor-lookup/?codigo_estudiante={{codigo_estudiante}}&department={{department}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reports",
+                "public-monitor-lookup",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "codigo_estudiante",
+                  "value": "{{codigo_estudiante}}"
+                },
+                {
+                  "key": "department",
+                  "value": "{{department}}"
+                }
+              ]
+            },
+            "description": "Verifica cómo quedan expuestas las métricas del monitor luego de procesar asistencia."
+          }
+        }
+      ]
+    }
+  ]
+}

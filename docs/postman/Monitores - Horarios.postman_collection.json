@@ -1,0 +1,505 @@
+{
+  "info": {
+    "_postman_id": "a8f6f47d-4cbf-4f2d-916c-6d886f13b203",
+    "name": "Monitores - Horarios",
+    "description": "Colección para autenticar, consultar y verificar horarios de monitores. Incluye flujo API y flujo de importación masiva por Django Admin.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000"
+    },
+    {
+      "key": "username",
+      "value": "admin"
+    },
+    {
+      "key": "password",
+      "value": "ChangeMe123!"
+    },
+    {
+      "key": "admin_username",
+      "value": "admin"
+    },
+    {
+      "key": "admin_password",
+      "value": "ChangeMe123!"
+    },
+    {
+      "key": "monitor_id",
+      "value": ""
+    },
+    {
+      "key": "schedule_id",
+      "value": ""
+    },
+    {
+      "key": "csrf_token",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "API Auth and Verification",
+      "item": [
+        {
+          "name": "API Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/login/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login",
+                ""
+              ]
+            },
+            "description": "Inicia sesión por API usando autenticación de sesión de Django."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('login ok', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const data = pm.response.json();",
+                  "if (data && data.role) {",
+                  "    pm.collectionVariables.set('current_role', data.role);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "API Me",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/me/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "me",
+                ""
+              ]
+            },
+            "description": "Confirma el usuario autenticado actual."
+          }
+        },
+        {
+          "name": "List Monitors",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/monitors/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "monitors",
+                ""
+              ]
+            },
+            "description": "Lista monitores para obtener el UUID necesario al crear horarios por API."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('monitors list ok', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const body = pm.response.json();",
+                  "if (Array.isArray(body) && body.length > 0 && !pm.collectionVariables.get('monitor_id')) {",
+                  "    pm.collectionVariables.set('monitor_id', body[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Schedules",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/schedules/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "schedules",
+                ""
+              ]
+            },
+            "description": "Verifica los horarios cargados después de importar o crear manualmente."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('schedules list ok', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const body = pm.response.json();",
+                  "if (Array.isArray(body) && body.length > 0) {",
+                  "    pm.collectionVariables.set('schedule_id', body[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Schedule",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"monitor\": \"{{monitor_id}}\",\n  \"weekday\": 0,\n  \"start_time\": \"06:00:00\",\n  \"end_time\": \"08:00:00\",\n  \"is_active\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/schedules/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "schedules",
+                ""
+              ]
+            },
+            "description": "Crea un horario manualmente vía API. Usa `monitor_id` obtenido en `List Monitors`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('schedule created', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+                  "});",
+                  "",
+                  "const body = pm.response.json();",
+                  "if (body && body.id) {",
+                  "    pm.collectionVariables.set('schedule_id', body.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Schedule",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"is_active\": false\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/schedules/{{schedule_id}}/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "schedules",
+                "{{schedule_id}}",
+                ""
+              ]
+            },
+            "description": "Desactiva un horario existente para comprobar actualización."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin Excel Import",
+      "item": [
+        {
+          "name": "Admin Login Page",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/admin/login/?next=/admin/schedules/schedule/import-schedules/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "login",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "next",
+                  "value": "/admin/schedules/schedule/import-schedules/"
+                }
+              ]
+            },
+            "description": "Carga la página de login del admin y captura el cookie CSRF."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const token = pm.cookies.get('csrftoken');",
+                  "if (token) {",
+                  "    pm.collectionVariables.set('csrf_token', token);",
+                  "}",
+                  "pm.test('csrf cookie available', function () {",
+                  "    pm.expect(pm.collectionVariables.get('csrf_token')).to.exist;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              },
+              {
+                "key": "Referer",
+                "value": "{{base_url}}/admin/login/?next=/admin/schedules/schedule/import-schedules/"
+              },
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "csrfmiddlewaretoken",
+                  "value": "{{csrf_token}}",
+                  "type": "text"
+                },
+                {
+                  "key": "username",
+                  "value": "{{admin_username}}",
+                  "type": "text"
+                },
+                {
+                  "key": "password",
+                  "value": "{{admin_password}}",
+                  "type": "text"
+                },
+                {
+                  "key": "next",
+                  "value": "/admin/schedules/schedule/import-schedules/",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/admin/login/?next=/admin/schedules/schedule/import-schedules/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "login",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "next",
+                  "value": "/admin/schedules/schedule/import-schedules/"
+                }
+              ]
+            },
+            "description": "Inicia sesión en Django Admin. Requiere un usuario staff."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const token = pm.cookies.get('csrftoken');",
+                  "if (token) {",
+                  "    pm.collectionVariables.set('csrf_token', token);",
+                  "}",
+                  "pm.test('admin login response ok', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 302]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin Import Form",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/admin/schedules/schedule/import-schedules/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "schedules",
+                "schedule",
+                "import-schedules",
+                ""
+              ]
+            },
+            "description": "Abre el formulario de importación y refresca el token CSRF si hace falta."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const token = pm.cookies.get('csrftoken');",
+                  "if (token) {",
+                  "    pm.collectionVariables.set('csrf_token', token);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin Import Schedules Excel",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-CSRFToken",
+                "value": "{{csrf_token}}"
+              },
+              {
+                "key": "Referer",
+                "value": "{{base_url}}/admin/schedules/schedule/import-schedules/"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "csrfmiddlewaretoken",
+                  "value": "{{csrf_token}}",
+                  "type": "text"
+                },
+                {
+                  "key": "source_file",
+                  "type": "file",
+                  "src": ""
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/admin/schedules/schedule/import-schedules/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "schedules",
+                "schedule",
+                "import-schedules",
+                ""
+              ]
+            },
+            "description": "Carga el Excel de horarios. En Postman debes seleccionar manualmente el archivo en el campo `source_file`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('import response ok', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 302]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin Schedule List",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/admin/schedules/schedule/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "admin",
+                "schedules",
+                "schedule",
+                ""
+              ]
+            },
+            "description": "Permite revisar rápidamente en el admin si los horarios aparecen después de la importación."
+          }
+        }
+      ]
+    }
+  ]
+}

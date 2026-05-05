@@ -1,0 +1,254 @@
+{% extends "base.html" %}
+
+{% block title %}Excepciones{% endblock %}
+
+{% block content %}
+<style>
+  .exception-form-card {
+    position: sticky;
+    top: 1rem;
+  }
+
+  .exception-status-badge {
+    min-width: 6rem;
+    display: inline-block;
+    text-align: center;
+  }
+
+  .exception-table td,
+  .exception-table th {
+    vertical-align: middle;
+  }
+
+  .exception-description {
+    max-width: 18rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .exception-pager {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+</style>
+
+<div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-2 mb-4">
+  <div>
+    <h1 class="h3 mb-1">Excepciones de horarios</h1>
+    <p class="text-muted mb-0">Crea periodos especiales en los que los retrasos no se contabilizan, por ejemplo vacaciones, semanas institucionales o permisos generales.</p>
+  </div>
+  <div class="text-muted small">
+    {% if request.user.role == "admin" %}
+      Como administrador puedes crear excepciones globales o por dependencia.
+    {% else %}
+      Como líder solo puedes crear excepciones para {{ request.user.get_department_display }}.
+    {% endif %}
+  </div>
+</div>
+
+<div class="alert alert-light border mb-4">
+  <strong>Estados de las excepciones:</strong>
+  <div class="small text-muted mt-2">
+    <div><strong>Vigente:</strong> la excepción está activa y la fecha actual está dentro del rango.</div>
+    <div><strong>Programada:</strong> la excepción está activa, pero su fecha inicial todavía no llega.</div>
+    <div><strong>Activa:</strong> la excepción sigue marcada como activa, aunque su rango de fechas ya terminó.</div>
+    <div><strong>Inactiva:</strong> la excepción está desactivada y no aplica sobre las sesiones.</div>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-4">
+    <div class="card shadow-sm exception-form-card">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+          <div>
+            <h2 class="h5 mb-1">
+              {% if editing_exception %}Editar excepción{% else %}Nueva excepción{% endif %}
+            </h2>
+            <p class="text-muted mb-0 small">La excepción se aplicará a las sesiones del rango indicado y recalculará los retardos afectados.</p>
+          </div>
+          {% if editing_exception %}
+            <a class="btn btn-outline-secondary btn-sm" href="{% url 'schedule-exceptions' %}">Cancelar</a>
+          {% endif %}
+        </div>
+
+        <form method="post" novalidate>
+          {% csrf_token %}
+          <input type="hidden" name="action" value="save">
+          {% if editing_exception %}
+            <input type="hidden" name="exception_id" value="{{ editing_exception.id }}">
+          {% endif %}
+
+          {% if form.non_field_errors %}
+            <div class="alert alert-danger py-2">
+              {% for error in form.non_field_errors %}
+                <div>{{ error }}</div>
+              {% endfor %}
+            </div>
+          {% endif %}
+
+          {% for field in form %}
+            {% if field.field.widget.input_type == "checkbox" %}
+              <div class="mb-3 form-check">
+                {{ field }}
+                <label class="form-check-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {% if field.help_text %}
+                  <div class="form-text">{{ field.help_text }}</div>
+                {% endif %}
+                {% for error in field.errors %}
+                  <div class="text-danger small">{{ error }}</div>
+                {% endfor %}
+              </div>
+            {% else %}
+              <div class="mb-3">
+                <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {% if field.help_text %}
+                  <div class="form-text">{{ field.help_text }}</div>
+                {% endif %}
+                {% for error in field.errors %}
+                  <div class="text-danger small">{{ error }}</div>
+                {% endfor %}
+              </div>
+            {% endif %}
+          {% endfor %}
+
+          <button class="btn btn-primary w-100" type="submit">
+            {% if editing_exception %}Guardar cambios{% else %}Crear excepción{% endif %}
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-8">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center gap-2 mb-3">
+          <div>
+            <h2 class="h5 mb-1">Excepciones registradas</h2>
+            <p class="text-muted mb-0 small">Se muestran las más recientes visibles para tu usuario.</p>
+          </div>
+          <span class="badge text-bg-light"><span id="exception-visible-count">{{ exceptions|length }}</span> visibles</span>
+        </div>
+
+        <div class="table-responsive">
+          <table class="table table-sm exception-table" id="exceptions-table">
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Dependencia</th>
+                <th>Fechas</th>
+                <th>Estado</th>
+                <th>Configuración</th>
+                <th class="text-end">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in exceptions %}
+                <tr class="exception-row">
+                  <td>
+                    <strong>{{ row.item.name }}</strong>
+                    {% if row.item.description %}
+                      <div class="text-muted small mt-1 exception-description">{{ row.item.description }}</div>
+                    {% endif %}
+                  </td>
+                  <td>{{ row.scope_label }}</td>
+                  <td>
+                    {{ row.item.start_date }}<br>
+                    <span class="text-muted small">hasta {{ row.item.end_date }}</span>
+                  </td>
+                  <td>
+                    <span class="badge {{ row.status.badge_class }} exception-status-badge">{{ row.status.label }}</span>
+                  </td>
+                  <td>
+                    {% if row.item.ignore_lateness %}
+                      <span class="badge text-bg-info">No contar retrasos</span>
+                    {% endif %}
+                    {% if row.item.approve_overtime %}
+                      <span class="badge text-bg-success">Contar horas extra</span>
+                    {% endif %}
+                    {% if not row.item.ignore_lateness and not row.item.approve_overtime %}
+                      <span class="badge text-bg-warning">Solo informativa</span>
+                    {% endif %}
+                  </td>
+                  <td class="text-end">
+                    {% if row.can_manage %}
+                      <div class="d-inline-flex gap-2">
+                        <a class="btn btn-outline-primary btn-sm" href="{% url 'schedule-exceptions' %}?edit={{ row.item.id }}">Editar</a>
+                        <form method="post" class="d-inline">
+                          {% csrf_token %}
+                          <input type="hidden" name="action" value="delete">
+                          <input type="hidden" name="exception_id" value="{{ row.item.id }}">
+                          <button class="btn btn-outline-danger btn-sm" type="submit" onclick="return confirm('¿Eliminar esta excepción?');">Eliminar</button>
+                        </form>
+                      </div>
+                    {% else %}
+                      <span class="text-muted small">Solo lectura</span>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% empty %}
+                <tr>
+                  <td colspan="6" class="text-center text-muted py-4">Todavía no hay excepciones visibles.</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <div class="exception-pager mt-3">
+          <small class="text-muted">
+            Pagina <span id="exception-page-current">1</span> de <span id="exception-page-total">1</span>
+          </small>
+          <div class="d-inline-flex gap-2">
+            <button class="btn btn-sm btn-outline-secondary" id="exception-page-prev" type="button">Anterior</button>
+            <button class="btn btn-sm btn-outline-secondary" id="exception-page-next" type="button">Siguiente</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    var rows = Array.from(document.querySelectorAll("#exceptions-table .exception-row"));
+    var visibleCount = document.getElementById("exception-visible-count");
+    var currentLabel = document.getElementById("exception-page-current");
+    var totalLabel = document.getElementById("exception-page-total");
+    var prevButton = document.getElementById("exception-page-prev");
+    var nextButton = document.getElementById("exception-page-next");
+    var pageSize = 8;
+    var currentPage = 1;
+
+    function renderPage(page) {
+      var totalPages = Math.max(Math.ceil(rows.length / pageSize), 1);
+      currentPage = Math.min(Math.max(page, 1), totalPages);
+      var start = (currentPage - 1) * pageSize;
+      var end = start + pageSize;
+
+      rows.forEach(function (row, index) {
+        row.classList.toggle("d-none", !(index >= start && index < end));
+      });
+
+      visibleCount.textContent = rows.length;
+      currentLabel.textContent = currentPage;
+      totalLabel.textContent = totalPages;
+      prevButton.disabled = currentPage <= 1;
+      nextButton.disabled = currentPage >= totalPages;
+    }
+
+    prevButton.addEventListener("click", function () {
+      renderPage(currentPage - 1);
+    });
+
+    nextButton.addEventListener("click", function () {
+      renderPage(currentPage + 1);
+    });
+
+    renderPage(1);
+  });
+</script>
+{% endblock %}

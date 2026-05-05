@@ -1,0 +1,229 @@
+{% extends "base.html" %}
+{% load common_extras %}
+
+{% block title %}Anotaciones{% endblock %}
+
+{% block content %}
+<style>
+  .annotation-form-card {
+    position: sticky;
+    top: 1rem;
+  }
+
+  .annotation-table td,
+  .annotation-table th {
+    vertical-align: middle;
+  }
+
+  .annotation-table th:last-child,
+  .annotation-table td:last-child {
+    width: 12.5rem;
+  }
+
+  .annotation-actions {
+    justify-content: flex-end;
+    flex-wrap: nowrap;
+  }
+
+  .annotation-actions .btn {
+    min-width: 5.25rem;
+    white-space: nowrap;
+  }
+
+  .annotation-pager {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+</style>
+
+<div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-2 mb-4">
+  <div>
+    <h1 class="h3 mb-1">Anotaciones y ajustes</h1>
+    <p class="text-muted mb-0">Registra sumas o descuentos manuales de horas para novedades como horas virtuales, permisos o correcciones administrativas.</p>
+  </div>
+  <div class="text-muted small">
+    Los cambios aquí afectan los totales mostrados en reportes, dashboard y consulta pública.
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-4">
+    <div class="card shadow-sm annotation-form-card">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+          <div>
+            <h2 class="h5 mb-1">
+              {% if editing_annotation %}Editar anotación{% else %}Nuevo ajuste{% endif %}
+            </h2>
+            <p class="text-muted mb-0 small">Puedes registrar una novedad nueva o corregir una ya existente.</p>
+          </div>
+          {% if editing_annotation %}
+            <a class="btn btn-outline-secondary btn-sm" href="{% url 'annotations-manage' %}">Cancelar</a>
+          {% endif %}
+        </div>
+        <form method="post" novalidate>
+          {% csrf_token %}
+          <input type="hidden" name="action" value="save">
+          {% if editing_annotation %}
+            <input type="hidden" name="annotation_id" value="{{ editing_annotation.id }}">
+          {% endif %}
+
+          {% if form.non_field_errors %}
+            <div class="alert alert-danger py-2">
+              {% for error in form.non_field_errors %}
+                <div>{{ error }}</div>
+              {% endfor %}
+            </div>
+          {% endif %}
+
+          {% for field in form %}
+            <div class="mb-3">
+              <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+              {{ field }}
+              {% if field.help_text %}
+                <div class="form-text">{{ field.help_text }}</div>
+              {% endif %}
+              {% for error in field.errors %}
+                <div class="text-danger small">{{ error }}</div>
+              {% endfor %}
+            </div>
+          {% endfor %}
+
+          <button class="btn btn-primary w-100" type="submit">
+            {% if editing_annotation %}Guardar cambios{% else %}Registrar anotación{% endif %}
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-8">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center gap-2 mb-3">
+          <div>
+            <h2 class="h5 mb-1">Historial reciente</h2>
+            <p class="text-muted mb-0 small">Últimas anotaciones visibles para tu usuario.</p>
+          </div>
+          <span class="badge text-bg-light"><span id="annotation-visible-count">{{ recent_annotations|length }}</span> registros</span>
+        </div>
+
+        <div class="table-responsive">
+          <table class="table table-sm annotation-table" id="annotations-table">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Monitor</th>
+                <th>Tipo</th>
+                <th>Acción</th>
+                <th>Ajuste</th>
+                <th>Motivo</th>
+                <th>Registró</th>
+                <th class="text-end">Gestión</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for annotation in recent_annotations %}
+                <tr class="annotation-row">
+                  <td>{{ annotation.occurred_on }}</td>
+                  <td>
+                    <strong>{{ annotation.monitor.full_name }}</strong>
+                    <div class="small text-muted">{{ annotation.monitor.codigo_estudiante }}</div>
+                  </td>
+                  <td>{{ annotation.get_annotation_type_display }}</td>
+                  <td>
+                    {% if annotation.action == "add" %}
+                      <span class="badge text-bg-success">{{ annotation.get_action_display }}</span>
+                    {% elif annotation.action == "deduct" %}
+                      <span class="badge text-bg-danger">{{ annotation.get_action_display }}</span>
+                    {% else %}
+                      <span class="badge text-bg-secondary">{{ annotation.get_action_display }}</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if annotation.delta_minutes > 0 %}
+                      <span class="text-success">+{{ annotation.delta_minutes|minutes_to_hours }} h</span>
+                    {% elif annotation.delta_minutes < 0 %}
+                      <span class="text-danger">{{ annotation.delta_minutes|minutes_to_hours }} h</span>
+                    {% else %}
+                      <span class="text-muted">0 h</span>
+                    {% endif %}
+                  </td>
+                  <td>{{ annotation.description }}</td>
+                  <td>{{ annotation.leader.display_name }}</td>
+                  <td class="text-end">
+                    <div class="d-inline-flex gap-2 annotation-actions">
+                      <a class="btn btn-outline-primary btn-sm" href="{% url 'annotations-manage' %}?edit={{ annotation.id }}">Editar</a>
+                      <form method="post" class="d-inline">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="delete">
+                        <input type="hidden" name="annotation_id" value="{{ annotation.id }}">
+                        <button class="btn btn-outline-danger btn-sm" type="submit" onclick="return confirm('¿Eliminar esta anotación?');">Eliminar</button>
+                      </form>
+                    </div>
+                  </td>
+                </tr>
+              {% empty %}
+                <tr>
+                  <td colspan="8" class="text-center text-muted py-4">Todavía no hay anotaciones registradas.</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <div class="annotation-pager mt-3">
+          <small class="text-muted">
+            Pagina <span id="annotation-page-current">1</span> de <span id="annotation-page-total">1</span>
+          </small>
+          <div class="d-inline-flex gap-2">
+            <button class="btn btn-sm btn-outline-secondary" id="annotation-page-prev" type="button">Anterior</button>
+            <button class="btn btn-sm btn-outline-secondary" id="annotation-page-next" type="button">Siguiente</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    var rows = Array.from(document.querySelectorAll("#annotations-table .annotation-row"));
+    var visibleCount = document.getElementById("annotation-visible-count");
+    var currentLabel = document.getElementById("annotation-page-current");
+    var totalLabel = document.getElementById("annotation-page-total");
+    var prevButton = document.getElementById("annotation-page-prev");
+    var nextButton = document.getElementById("annotation-page-next");
+    var pageSize = 10;
+    var currentPage = 1;
+
+    function renderPage(page) {
+      var totalPages = Math.max(Math.ceil(rows.length / pageSize), 1);
+      currentPage = Math.min(Math.max(page, 1), totalPages);
+      var start = (currentPage - 1) * pageSize;
+      var end = start + pageSize;
+
+      rows.forEach(function (row, index) {
+        row.classList.toggle("d-none", !(index >= start && index < end));
+      });
+
+      visibleCount.textContent = rows.length;
+      currentLabel.textContent = currentPage;
+      totalLabel.textContent = totalPages;
+      prevButton.disabled = currentPage <= 1;
+      nextButton.disabled = currentPage >= totalPages;
+    }
+
+    prevButton.addEventListener("click", function () {
+      renderPage(currentPage - 1);
+    });
+
+    nextButton.addEventListener("click", function () {
+      renderPage(currentPage + 1);
+    });
+
+    renderPage(1);
+  });
+</script>
+{% endblock %}

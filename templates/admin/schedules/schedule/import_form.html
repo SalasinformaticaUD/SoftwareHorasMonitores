@@ -1,0 +1,20 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+  <div id="content-main">
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      <fieldset class="module aligned">
+        {{ form.as_p }}
+      </fieldset>
+      <div class="submit-row">
+        <input type="submit" value="Importar horarios" class="default">
+        <a href="{% url 'admin:schedules_schedule_changelist' %}" class="button cancel-link">Volver</a>
+      </div>
+    </form>
+    <div class="help">
+      <p>El archivo debe incluir bloques por monitor con las etiquetas <strong>NOMBRE</strong> y <strong>CODIGO</strong>, y una columna <strong>DIA/HORA</strong>.</p>
+      <p>Los bloques consecutivos del mismo día se unen automáticamente. Por ejemplo, <strong>MIÉRCOLES 12-14</strong> y <strong>MIÉRCOLES 14-16</strong> se importan como un solo horario de <strong>12:00 a 16:00</strong>.</p>
+    </div>
+  </div>
+{% endblock %}

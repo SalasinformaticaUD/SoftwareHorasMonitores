@@ -1,0 +1,380 @@
+{% extends "base.html" %}
+{% load common_extras %}
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<style>
+  .department-separator td {
+    background: rgba(241, 196, 83, 0.1);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  .department-toggle {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    padding: 0;
+    text-align: left;
+    font: inherit;
+  }
+
+  .department-toggle-indicator {
+    display: inline-block;
+    width: 1rem;
+    margin-right: 0.35rem;
+    transition: transform 0.2s ease;
+  }
+
+  .department-toggle[aria-expanded="false"] .department-toggle-indicator {
+    transform: rotate(-90deg);
+  }
+
+  .department-row.is-collapsed {
+    display: none;
+  }
+
+  .dashboard-table td:last-child,
+  .dashboard-table th:last-child {
+    width: 11rem;
+  }
+
+  .dashboard-pagination-shell {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .dashboard-pagination-row td {
+    background: rgba(255, 251, 246, 0.72);
+  }
+
+  .dashboard-side-list li + li {
+    margin-top: 0.85rem;
+    padding-top: 0.85rem;
+    border-top: 1px solid rgba(158, 29, 32, 0.06);
+  }
+
+  .dashboard-monitor-intro p + p {
+    display: none;
+  }
+
+  .dashboard-records-pager {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .dashboard-record-intro p + p {
+    display: none;
+  }
+</style>
+<h1 class="h3 mb-4">Dashboard de lider</h1>
+<div class="alert alert-secondary small">
+  Los Excel por dependencia se generan en: <strong>{{ dashboard_export_directory }}</strong>
+</div>
+
+<div class="card shadow-sm mb-4">
+  <div class="card-body">
+    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-2 mb-3">
+      <div class="dashboard-monitor-intro">
+        <h2 class="h5 mb-1">Horas por monitor</h2>
+        <p class="text-muted mb-0">Se muestran todos los monitores visibles, organizados por dependencia con paginacion independiente dentro de la misma tabla.</p>
+        <p class="text-muted mb-0">Página {{ monitor_rows.number }} de {{ monitor_rows.paginator.num_pages }}. Total visible: {{ monitor_rows.paginator.count }} monitores.</p>
+      </div>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-sm dashboard-table">
+        <thead>
+          <tr>
+            <th>Monitor</th>
+            <th>Normales (h)</th>
+            <th>Horas extra aprobadas (h)</th>
+            <th>Horas extra por aprobar (h)</th>
+            <th>Anotaciones (h)</th>
+            <th>Total (h)</th>
+            <th>Faltan para 192 h</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% regroup monitor_rows by department as department_groups %}
+          {% for group in department_groups %}
+            <tr class="department-separator">
+              <td colspan="8">
+                <button
+                  class="department-toggle"
+                  type="button"
+                  data-department-group="{{ group.grouper }}"
+                  aria-expanded="true"
+                >
+                  <span class="department-toggle-indicator">&#9660;</span>
+                  {{ group.list.0.department_label }}
+                </button>
+              </td>
+            </tr>
+            {% for row in group.list %}
+              <tr class="department-row" data-department-group="{{ group.grouper }}" data-row-index="{{ forloop.counter0 }}">
+                <td>{{ row.monitor.full_name }}</td>
+                <td>{{ row.normal_hours }}</td>
+                <td>{{ row.approved_overtime_hours }}</td>
+                <td>{{ row.pending_overtime_hours }}</td>
+                <td>{{ row.annotation_hours }}</td>
+                <td>{{ row.total_hours }}</td>
+                <td>{{ row.remaining_hours }}</td>
+                <td>
+                  <a class="btn btn-sm btn-success" href="{% url 'dashboard-monitor-records' row.monitor.id %}">
+                    Ver registros
+                  </a>
+                </td>
+              </tr>
+            {% endfor %}
+            <tr class="department-export-row" data-department-group="{{ group.grouper }}">
+              <td class="text-end" colspan="8">
+                <a class="btn btn-sm btn-outline-success" href="{% url 'dashboard-department-export' group.grouper %}">
+                  Generar Excel de {{ group.list.0.department_label }}
+                </a>
+              </td>
+            </tr>
+            <tr class="dashboard-pagination-row" data-department-group="{{ group.grouper }}">
+              <td colspan="8">
+                <div class="dashboard-pagination-shell">
+                  <small class="text-muted">
+                    Pagina <span data-role="page-current">1</span> de <span data-role="page-total">1</span>
+                    · <span data-role="page-count">{{ group.list|length }}</span> registros en esta dependencia
+                  </small>
+                  <div class="d-inline-flex gap-2">
+                    <button class="btn btn-sm btn-outline-secondary department-page-btn" type="button" data-direction="prev" data-department-group="{{ group.grouper }}">
+                      Anterior
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary department-page-btn" type="button" data-direction="next" data-department-group="{{ group.grouper }}">
+                      Siguiente
+                    </button>
+                  </div>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8">Sin datos.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-xl-4">
+    <div class="card shadow-sm h-100">
+      <div class="card-body">
+        <h2 class="h5">Horas extra por aprobar</h2>
+        <ul class="list-group list-group-flush dashboard-side-list">
+          {% for session in pending_overtime %}
+            <li class="list-group-item px-0">
+              <strong>{{ session.monitor.full_name }}</strong>
+              <div class="small text-muted">{{ session.work_day }} · {{ session.overtime_minutes|minutes_to_hours }} h por aprobar</div>
+            </li>
+          {% empty %}
+            <li class="list-group-item px-0">No hay horas extra por aprobar.</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="col-xl-4">
+    <div class="card shadow-sm h-100">
+      <div class="card-body">
+        <h2 class="h5">Notificaciones</h2>
+        <ul class="list-group list-group-flush dashboard-side-list">
+          {% for notification in notifications %}
+            <li class="list-group-item px-0">
+              <strong>{{ notification.title }}</strong>
+              <div class="small text-muted mt-1">{{ notification.body }}</div>
+            </li>
+          {% empty %}
+            <li class="list-group-item px-0">Sin notificaciones.</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="col-xl-4">
+    <div class="card shadow-sm h-100">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
+          <h2 class="h5 mb-0">Anotaciones recientes</h2>
+          <a class="btn btn-sm btn-outline-secondary" href="{% url 'annotations-manage' %}">Ver todas</a>
+        </div>
+        <ul class="list-group list-group-flush dashboard-side-list">
+          {% for annotation in recent_annotations %}
+            <li class="list-group-item px-0">
+              <strong>{{ annotation.monitor.full_name }}</strong>
+              {% if annotation.delta_minutes > 0 %}
+                <span class="text-success">+{{ annotation.delta_minutes|minutes_to_hours }} h</span>
+              {% elif annotation.delta_minutes < 0 %}
+                <span class="text-danger">{{ annotation.delta_minutes|minutes_to_hours }} h</span>
+              {% endif %}
+              <div class="small text-muted">{{ annotation.get_annotation_type_display }} · {{ annotation.occurred_on }}</div>
+            </li>
+          {% empty %}
+            <li class="list-group-item px-0">Sin anotaciones recientes.</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card shadow-sm mt-4">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-center gap-2 mb-3">
+      <div class="dashboard-record-intro">
+        <h2 class="h5 mb-1">Historial reciente de registros</h2>
+        <p class="text-muted mb-0"><span id="dashboard-record-visible-count">{{ recent_raw_records|length }}</span> registros visibles.</p>
+        <p class="text-muted mb-0">Página {{ recent_raw_records.number }} de {{ recent_raw_records.paginator.num_pages }}.</p>
+      </div>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-sm" id="dashboard-records-table">
+        <thead>
+          <tr>
+            <th>Nombre crudo</th>
+            <th>Dependencia</th>
+            <th>Fecha</th>
+            <th>Estado</th>
+            <th>Monitor</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for record in recent_raw_records %}
+            <tr class="dashboard-record-row">
+              <td>{{ record.raw_full_name }}</td>
+              <td>{{ record.raw_department }}</td>
+              <td>{{ record.work_day }}</td>
+              <td>{{ record.get_reconciliation_status_display }}</td>
+              <td>{{ record.monitor.full_name|default:"-" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5">Sin registros.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="dashboard-records-pager mt-3">
+      <small class="text-muted">
+        Pagina <span id="dashboard-record-page-current">1</span> de <span id="dashboard-record-page-total">1</span>
+      </small>
+      <div class="d-inline-flex gap-2">
+        <button class="btn btn-sm btn-outline-secondary" id="dashboard-record-page-prev" type="button">Anterior</button>
+        <button class="btn btn-sm btn-outline-secondary" id="dashboard-record-page-next" type="button">Siguiente</button>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    var departmentPageSize = 8;
+
+    function updateDepartmentPagination(group) {
+      var rows = Array.from(document.querySelectorAll('.department-row[data-department-group="' + group + '"]'));
+      var toggle = document.querySelector('.department-toggle[data-department-group="' + group + '"]');
+      var exportRow = document.querySelector('.department-export-row[data-department-group="' + group + '"]');
+      var paginationRow = document.querySelector('.dashboard-pagination-row[data-department-group="' + group + '"]');
+      if (!rows.length || !paginationRow) {
+        return;
+      }
+
+      var isExpanded = !toggle || toggle.getAttribute("aria-expanded") === "true";
+      var totalPages = Math.max(Math.ceil(rows.length / departmentPageSize), 1);
+      var currentPage = parseInt(paginationRow.dataset.currentPage || "1", 10);
+      if (currentPage > totalPages) {
+        currentPage = totalPages;
+      }
+
+      rows.forEach(function (row, index) {
+        var rowPage = Math.floor(index / departmentPageSize) + 1;
+        row.classList.toggle("is-collapsed", !(isExpanded && rowPage === currentPage));
+      });
+
+      paginationRow.querySelector('[data-role="page-current"]').textContent = currentPage;
+      paginationRow.querySelector('[data-role="page-total"]').textContent = totalPages;
+      paginationRow.dataset.currentPage = currentPage;
+      paginationRow.querySelector('[data-direction="prev"]').disabled = currentPage <= 1;
+      paginationRow.querySelector('[data-direction="next"]').disabled = currentPage >= totalPages;
+      paginationRow.style.display = isExpanded ? "" : "none";
+      if (exportRow) {
+        exportRow.style.display = isExpanded ? "" : "none";
+      }
+    }
+
+    document.querySelectorAll(".department-toggle").forEach(function (button) {
+      button.addEventListener("click", function () {
+        var group = button.dataset.departmentGroup;
+        var isExpanded = button.getAttribute("aria-expanded") === "true";
+        button.setAttribute("aria-expanded", isExpanded ? "false" : "true");
+        updateDepartmentPagination(group);
+      });
+    });
+
+    document.querySelectorAll(".department-page-btn").forEach(function (button) {
+      button.addEventListener("click", function () {
+        var group = button.dataset.departmentGroup;
+        var paginationRow = document.querySelector('.dashboard-pagination-row[data-department-group="' + group + '"]');
+        if (!paginationRow) {
+          return;
+        }
+
+        var currentPage = parseInt(paginationRow.dataset.currentPage || "1", 10);
+        paginationRow.dataset.currentPage = button.dataset.direction === "next" ? currentPage + 1 : currentPage - 1;
+        updateDepartmentPagination(group);
+      });
+    });
+
+    document.querySelectorAll(".dashboard-pagination-row").forEach(function (row) {
+      row.dataset.currentPage = "1";
+      updateDepartmentPagination(row.dataset.departmentGroup);
+    });
+
+    var dashboardRecordRows = Array.from(document.querySelectorAll(".dashboard-record-row"));
+    var dashboardRecordVisibleCount = document.getElementById("dashboard-record-visible-count");
+    var dashboardRecordCurrent = document.getElementById("dashboard-record-page-current");
+    var dashboardRecordTotal = document.getElementById("dashboard-record-page-total");
+    var dashboardRecordPrev = document.getElementById("dashboard-record-page-prev");
+    var dashboardRecordNext = document.getElementById("dashboard-record-page-next");
+    var dashboardRecordPage = 1;
+    var dashboardRecordPageSize = 8;
+
+    function renderDashboardRecordPage(page) {
+      var totalPages = Math.max(Math.ceil(dashboardRecordRows.length / dashboardRecordPageSize), 1);
+      dashboardRecordPage = Math.min(Math.max(page, 1), totalPages);
+      var start = (dashboardRecordPage - 1) * dashboardRecordPageSize;
+      var end = start + dashboardRecordPageSize;
+
+      dashboardRecordRows.forEach(function (row, index) {
+        row.classList.toggle("d-none", !(index >= start && index < end));
+      });
+
+      dashboardRecordVisibleCount.textContent = dashboardRecordRows.length;
+      dashboardRecordCurrent.textContent = dashboardRecordPage;
+      dashboardRecordTotal.textContent = totalPages;
+      dashboardRecordPrev.disabled = dashboardRecordPage <= 1;
+      dashboardRecordNext.disabled = dashboardRecordPage >= totalPages;
+    }
+
+    dashboardRecordPrev.addEventListener("click", function () {
+      renderDashboardRecordPage(dashboardRecordPage - 1);
+    });
+
+    dashboardRecordNext.addEventListener("click", function () {
+      renderDashboardRecordPage(dashboardRecordPage + 1);
+    });
+
+    renderDashboardRecordPage(1);
+  });
+</script>
+{% endblock %}

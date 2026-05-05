@@ -1,0 +1,6 @@
+from apps.common.choices import NotificationEventChoices
+
+SESSION_PROCESSED = NotificationEventChoices.SESSION_PROCESSED
+OVERTIME_PENDING = NotificationEventChoices.OVERTIME_PENDING
+OVERTIME_REVIEWED = NotificationEventChoices.OVERTIME_REVIEWED
+

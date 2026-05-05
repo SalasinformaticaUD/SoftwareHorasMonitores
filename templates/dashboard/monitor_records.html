@@ -1,0 +1,241 @@
+{% extends "base.html" %}
+{% load common_extras %}
+
+{% block title %}Registros del monitor{% endblock %}
+
+{% block content %}
+<style>
+  .lookup-stat-card {
+    height: 100%;
+  }
+
+  .lookup-stat-label {
+    display: block;
+    font-size: 0.8rem;
+    color: #6c757d;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .lookup-stat-value {
+    font-size: 1.35rem;
+    font-weight: 700;
+    line-height: 1.1;
+  }
+
+  .lookup-history-table thead th {
+    white-space: nowrap;
+    vertical-align: middle;
+  }
+
+  .lookup-history-table tbody td {
+    vertical-align: middle;
+  }
+
+  .lookup-history-help {
+    font-size: 0.82rem;
+    color: #6c757d;
+    line-height: 1.45;
+  }
+
+  .monitor-records-pager {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .monitor-record-intro p + p {
+    display: none;
+  }
+</style>
+<div class="d-flex justify-content-between align-items-center gap-2 mb-4">
+  <div>
+    <h1 class="h3 mb-1">Registros del monitor</h1>
+    <p class="text-muted mb-0">Detalle de entradas y salidas con la misma vista de historial de la consulta pública.</p>
+  </div>
+  <a class="btn btn-outline-secondary" href="{% url 'leader-dashboard' %}">Volver al dashboard</a>
+</div>
+
+{% if result %}
+  <div class="card shadow-sm mb-4">
+    <div class="card-body">
+      <h2 class="h5">{{ result.monitor.full_name }}</h2>
+      <p class="mb-1">Código: {{ result.monitor.codigo_estudiante }}</p>
+      <p class="mb-0">Dependencia: {{ result.monitor.get_department_display }}</p>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-md-4">
+      <div class="card shadow-sm lookup-stat-card">
+        <div class="card-body">
+          <span class="lookup-stat-label">Horas turno (h)</span>
+          <div class="lookup-stat-value">{{ result.metrics.normal_minutes|minutes_to_hours }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card shadow-sm lookup-stat-card">
+        <div class="card-body">
+          <span class="lookup-stat-label">Horas extra aprobadas (h)</span>
+          <div class="lookup-stat-value">{{ result.metrics.approved_overtime_minutes|minutes_to_hours }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card shadow-sm lookup-stat-card border-primary-subtle">
+        <div class="card-body">
+          <span class="lookup-stat-label">Total de horas (h)</span>
+          <div class="lookup-stat-value text-primary">{{ result.metrics.net_total_minutes|minutes_to_hours }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card shadow-sm lookup-stat-card">
+        <div class="card-body">
+          <span class="lookup-stat-label">Horas extra por aprobar (h)</span>
+          <div class="lookup-stat-value">{{ result.metrics.pending_overtime_minutes|minutes_to_hours }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card shadow-sm lookup-stat-card">
+        <div class="card-body">
+          <span class="lookup-stat-label">Anotaciones (h)</span>
+          <div class="lookup-stat-value">{{ result.metrics.annotation_delta_minutes|minutes_to_hours }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card shadow-sm lookup-stat-card border-warning-subtle">
+        <div class="card-body">
+          <span class="lookup-stat-label">Faltan para 192 h</span>
+          <div class="lookup-stat-value text-warning-emphasis">{{ result.metrics.remaining_minutes|minutes_to_hours }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card shadow-sm mt-4">
+    <div class="card-body">
+      <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-2 mb-3">
+        <div class="monitor-record-intro">
+            <h3 class="h5 mb-1">Historial reciente</h3>
+            <p class="text-muted mb-0"><span id="monitor-record-visible-count">{{ result.recent_sessions|length }}</span> sesiones visibles.</p>
+          <p class="text-muted mb-0">Resumen de las sesiones más recientes registradas para este monitor.</p>
+        </div>
+      </div>
+      <div class="lookup-history-help border rounded bg-light px-3 py-2 mb-3">
+        <strong>Guía rápida:</strong>
+        `Entrada` y `Salida` muestran la hora exacta registrada;
+        `Normales` son horas dentro del turno;
+        `Extra` son horas fuera del turno;
+        `Anotaciones` corresponden a ajustes manuales de horas;
+        `Retraso` es tardanza frente al inicio esperado.
+        Si aparece `Exento`, hubo una excepción activa y ese retardo no se contó.
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm table-hover lookup-history-table" id="monitor-records-table">
+          <thead>
+            <tr class="table-light">
+              <th>Fecha</th>
+              <th>Entrada</th>
+              <th>Salida</th>
+              <th>Normales (h)</th>
+              <th>Extra (h)</th>
+              <th>Retraso (h)</th>
+              <th>Estado extra</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for session in result.recent_sessions %}
+              <tr class="monitor-record-row">
+                <td><strong>{{ session.work_day }}</strong></td>
+                <td class="text-center">{{ session.actual_start|time:"H:i:s" }}</td>
+                <td class="text-center">{{ session.actual_end|time:"H:i:s" }}</td>
+                <td class="text-center">{{ session.normal_minutes|minutes_to_hours }}</td>
+                <td class="text-center">{{ session.overtime_minutes|minutes_to_hours }}</td>
+                <td class="text-center">
+                  {{ session.late_minutes|minutes_to_hours }}
+                  {% if session.lateness_excused %}
+                    <div><span class="badge text-bg-info mt-1">Exento</span></div>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if session.overtime_status == "approved" %}
+                    <span class="badge text-bg-success">{{ session.get_overtime_status_display }}</span>
+                  {% elif session.overtime_status == "pending" %}
+                    <span class="badge text-bg-warning">{{ session.get_overtime_status_display }}</span>
+                  {% elif session.overtime_status == "rejected" %}
+                    <span class="badge text-bg-danger">{{ session.get_overtime_status_display }}</span>
+                  {% else %}
+                    <span class="badge text-bg-secondary">{{ session.get_overtime_status_display }}</span>
+                  {% endif %}
+                  {% if session.overtime_auto_approved and session.overtime_exception %}
+                    <div class="small text-muted mt-1">Extra: {{ session.overtime_exception.name }}</div>
+                  {% endif %}
+                  {% if session.lateness_excused and session.lateness_exception %}
+                    <div class="small text-muted mt-1">Retraso: {{ session.lateness_exception.name }}</div>
+                  {% endif %}
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td class="text-center text-muted py-4" colspan="7">Sin historial.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="monitor-records-pager mt-3">
+        <small class="text-muted">
+          Pagina <span id="monitor-record-page-current">1</span> de <span id="monitor-record-page-total">1</span>
+        </small>
+        <div class="d-inline-flex gap-2">
+          <button class="btn btn-sm btn-outline-secondary" id="monitor-record-page-prev" type="button">Anterior</button>
+          <button class="btn btn-sm btn-outline-secondary" id="monitor-record-page-next" type="button">Siguiente</button>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endif %}
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    var rows = Array.from(document.querySelectorAll(".monitor-record-row"));
+    var visibleCount = document.getElementById("monitor-record-visible-count");
+    var currentLabel = document.getElementById("monitor-record-page-current");
+    var totalLabel = document.getElementById("monitor-record-page-total");
+    var prevButton = document.getElementById("monitor-record-page-prev");
+    var nextButton = document.getElementById("monitor-record-page-next");
+    var pageSize = 10;
+    var currentPage = 1;
+
+    function renderPage(page) {
+      var totalPages = Math.max(Math.ceil(rows.length / pageSize), 1);
+      currentPage = Math.min(Math.max(page, 1), totalPages);
+      var start = (currentPage - 1) * pageSize;
+      var end = start + pageSize;
+
+      rows.forEach(function (row, index) {
+        row.classList.toggle("d-none", !(index >= start && index < end));
+      });
+
+      visibleCount.textContent = rows.length;
+      currentLabel.textContent = currentPage;
+      totalLabel.textContent = totalPages;
+      prevButton.disabled = currentPage <= 1;
+      nextButton.disabled = currentPage >= totalPages;
+    }
+
+    prevButton.addEventListener("click", function () {
+      renderPage(currentPage - 1);
+    });
+
+    nextButton.addEventListener("click", function () {
+      renderPage(currentPage + 1);
+    });
+
+    renderPage(1);
+  });
+</script>
+{% endblock %}

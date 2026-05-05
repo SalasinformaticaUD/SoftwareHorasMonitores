@@ -1,0 +1,94 @@
+x-app-common: &app-common
+  build:
+    context: .
+  image: monitores-app:latest
+  env_file:
+    - .env
+  restart: unless-stopped
+  init: true
+  volumes:
+    - media_data:/app/media
+    - static_data:/app/staticfiles
+    - ./dropzone:/app/dropzone
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+services:
+  app:
+    <<: *app-common
+    command: ["web"]
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz/', timeout=5)"
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  worker:
+    <<: *app-common
+    command: ["worker"]
+    depends_on:
+      app:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  beat:
+    <<: *app-common
+    command: ["beat"]
+    depends_on:
+      app:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-monitores}
+      POSTGRES_USER: ${POSTGRES_USER:-monitores}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-this-postgres-password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U ${POSTGRES_USER:-monitores} -d ${POSTGRES_DB:-monitores}
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "60", "1000", "--loglevel", "warning"]
+    healthcheck:
+      test:
+        - CMD
+        - redis-cli
+        - ping
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  media_data:
+  postgres_data:
+  static_data:

@@ -21,36 +21,33 @@ class AttendanceImportView(AdminOrLeaderRequiredMixin, FormView):
     def form_valid(self, form):
         try:
             job = create_import_job(uploaded_file=form.cleaned_data["file"], uploaded_by=self.request.user)
-            process_import_job.delay(str(job.id))
-            if getattr(settings, "CELERY_TASK_ALWAYS_EAGER", False):
-                job.refresh_from_db()
-                skipped_rows = max(job.total_rows - job.imported_rows - job.failed_rows, 0)
-                if job.failed_rows:
-                    messages.warning(
-                        self.request,
-                        (
-                            f"Archivo procesado. Importadas: {job.imported_rows}, "
-                            f"omitidas: {skipped_rows}, con error: {job.failed_rows}."
-                        ),
-                    )
-                elif job.imported_rows == 0 and skipped_rows:
-                    messages.info(
-                        self.request,
-                        (
-                            "Archivo procesado, pero no se agregaron registros nuevos. "
-                            f"Se omitieron {skipped_rows} filas porque ya existian."
-                        ),
-                    )
-                else:
-                    messages.success(
-                        self.request,
-                        (
-                            f"Archivo procesado. Importadas: {job.imported_rows}, "
-                            f"omitidas: {skipped_rows}, con error: {job.failed_rows}."
-                        ),
-                    )
+            process_import_job(str(job.id))
+            job.refresh_from_db()
+            skipped_rows = max(job.total_rows - job.imported_rows - job.failed_rows, 0)
+            if job.failed_rows:
+                messages.warning(
+                    self.request,
+                    (
+                        f"Archivo procesado. Importadas: {job.imported_rows}, "
+                        f"omitidas: {skipped_rows}, con error: {job.failed_rows}."
+                    ),
+                )
+            elif job.imported_rows == 0 and skipped_rows:
+                messages.info(
+                    self.request,
+                    (
+                        "Archivo procesado, pero no se agregaron registros nuevos. "
+                        f"Se omitieron {skipped_rows} filas porque ya existian."
+                    ),
+                )
             else:
-                messages.success(self.request, "Archivo cargado. La importacion quedo en cola.")
+                messages.success(
+                    self.request,
+                    (
+                        f"Archivo procesado. Importadas: {job.imported_rows}, "
+                        f"omitidas: {skipped_rows}, con error: {job.failed_rows}."
+                    ),
+                )
         except ValidationError as exc:
             messages.error(self.request, "; ".join(exc.messages))
         return redirect("attendance-upload")

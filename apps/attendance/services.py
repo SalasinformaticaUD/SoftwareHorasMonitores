@@ -256,6 +256,7 @@ def import_workbook(job: AttendanceImportJob) -> AttendanceImportJob:
         worksheet = workbook.active
         rows = worksheet.iter_rows(values_only=True)
         headers = next(rows, None)
+        print(f"Headers: {headers}")
         if not headers:
             raise ValueError("El archivo está vacío.")
         header_map = resolve_headers([str(item) for item in headers])

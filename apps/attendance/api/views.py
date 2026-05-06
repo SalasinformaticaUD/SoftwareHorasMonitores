@@ -28,7 +28,7 @@ class AttendanceImportJobViewSet(viewsets.ModelViewSet):
                 uploaded_file=self.request.FILES["source_file"],
                 uploaded_by=self.request.user,
             )
-            process_import_job.delay(str(job.id))
+            process_import_job(str(job.id))
             serializer.instance = job
         except DjangoValidationError as exc:
             raise exceptions.ValidationError(exc.messages)

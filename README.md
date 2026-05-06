@@ -1,6 +1,6 @@
 # Monitores
 
-Backend-first para gestion de horas de monitores universitarios con Django, Django REST Framework, PostgreSQL, Redis y Celery.
+Backend-first para gestion de horas de monitores universitarios con Django, Django REST Framework y PostgreSQL.
 
 ## Funcionalidad actual
 
@@ -77,29 +77,19 @@ La arquitectura resumida esta en `docs/architecture.md`.
 
 1. Crea y activa un entorno virtual con Python 3.12 o superior.
 2. Instala dependencias con `pip install -r requirements.txt`.
-3. Configura PostgreSQL. Redis es opcional si usas ejecucion inline de Celery en Windows.
+3. Configura PostgreSQL.
 4. Ejecuta:
    - `python manage.py migrate`
    - `python manage.py seed_initial_data`
    - `python manage.py runserver`
 
-`config.settings.local` deja `CELERY_TASK_ALWAYS_EAGER=True` por defecto en Windows, asi que las tareas manuales de importacion y reportes pueden correr inline sin worker.
-
-Si quieres usar Celery real en local:
-
-1. Ajusta `CELERY_TASK_ALWAYS_EAGER=False`.
-2. Apunta `DATABASE_URL` y `REDIS_URL` a `localhost` si Postgres y Redis estan expuestos desde Docker.
-3. Ejecuta:
-   - `celery -A config worker -l info`
-   - `celery -A config beat -l info`
+`config.settings.local` ejecuta las tareas de importación de forma síncrona en local.
 
 ## Variables de entorno utiles
 
 - `DATABASE_URL`
-- `REDIS_URL`
 - `TIME_ZONE`
-- `CELERY_IMPORT_DROPZONE`
-- `CELERY_TASK_ALWAYS_EAGER`
+- `IMPORT_DROPZONE_PATH`
 - `SEED_DEFAULT_PASSWORD`
 
 ## Usuarios semilla

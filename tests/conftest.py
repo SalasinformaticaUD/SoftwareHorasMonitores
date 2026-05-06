@@ -15,7 +15,6 @@ def api_client():
 @pytest.fixture(autouse=True)
 def _media_root(settings, tmp_path):
     settings.MEDIA_ROOT = tmp_path / "media"
-    settings.CELERY_TASK_ALWAYS_EAGER = True
     return settings.MEDIA_ROOT
 
 

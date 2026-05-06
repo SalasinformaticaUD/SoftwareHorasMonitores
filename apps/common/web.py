@@ -1,5 +1,3 @@
-from redis import Redis
-
 from django.db import connections
 from django.http import JsonResponse
 from django.conf import settings
@@ -59,14 +57,6 @@ def health_check(_request):
     except Exception as exc:  # pragma: no cover
         status = 503
         checks["database"] = f"error: {exc.__class__.__name__}"
-
-    try:
-        redis_client = Redis.from_url(settings.CELERY_BROKER_URL)
-        redis_client.ping()
-        checks["redis"] = "ok"
-    except Exception as exc:  # pragma: no cover
-        status = 503
-        checks["redis"] = f"error: {exc.__class__.__name__}"
 
     return JsonResponse(
         {

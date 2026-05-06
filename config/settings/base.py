@@ -1,7 +1,6 @@
 from pathlib import Path
 
 import environ
-from celery.schedules import crontab
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
@@ -139,17 +138,8 @@ SPECTACULAR_SETTINGS = {
     "SERVE_INCLUDE_SCHEMA": False,
 }
 
-CELERY_BROKER_URL = env("REDIS_URL", default="redis://localhost:6379/0")
-CELERY_RESULT_BACKEND = env("REDIS_URL", default="redis://localhost:6379/0")
-CELERY_TIMEZONE = TIME_ZONE
-CELERY_BEAT_SCHEDULE = {
-    "weekly-attendance-import": {
-        "task": "apps.attendance.tasks.import_attendance_from_dropzone",
-        "schedule": crontab(minute=0, hour=6, day_of_week="monday"),
-    },
-}
-CELERY_IMPORT_DROPZONE = env(
-    "CELERY_IMPORT_DROPZONE",
+IMPORT_DROPZONE_PATH = env(
+    "IMPORT_DROPZONE_PATH",
     default=str(BASE_DIR / "dropzone" / "croschex.xlsx"),
 )
 

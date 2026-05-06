@@ -57,7 +57,7 @@ def resolve_headers(headers: List[str]) -> Dict[str, int]:
         if alias and alias not in mapping:
             mapping[alias] = index
     missing = {
-        "Departmento",
+        "department",
         "num_user",
         "id_user",
         "full_name",

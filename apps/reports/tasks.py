@@ -1,13 +1,10 @@
 from datetime import date
 from typing import Optional
 
-from celery import shared_task
-
 from apps.monitors.models import Monitor
 from apps.reports.services import generate_monitor_report
 
 
-@shared_task
 def generate_monitor_report_task(
     monitor_id: str,
     start_date: str,

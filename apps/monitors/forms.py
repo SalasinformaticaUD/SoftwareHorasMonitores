@@ -2,7 +2,7 @@ from django import forms
 from django.contrib.auth import get_user_model
 
 from apps.attendance.validators import validate_excel_extension
-from apps.common.choices import DepartmentChoices
+from apps.common.choices import DepartmentChoices, UserRoleChoices
 from apps.monitors.models import Monitor
 
 
@@ -23,10 +23,17 @@ class MonitorRegistrationForm(forms.Form):
     email = forms.EmailField(label="Correo institucional")
     department = forms.ChoiceField(label="Dependencia", choices=DepartmentChoices.choices)
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, actor=None, **kwargs):
+        self.actor = actor
         super().__init__(*args, **kwargs)
         for field in self.fields.values():
             _apply_bootstrap(field)
+        if actor and actor.role != UserRoleChoices.ADMIN:
+            self.fields["department"].choices = [
+                choice for choice in DepartmentChoices.choices if choice[0] == actor.department
+            ]
+            self.fields["department"].initial = actor.department
+            self.fields["department"].help_text = "Como lider, solo puedes registrar monitores de tu dependencia."
 
     def clean_email(self):
         email = self.cleaned_data["email"].strip().lower()
@@ -39,6 +46,12 @@ class MonitorRegistrationForm(forms.Form):
         if Monitor.objects.filter(codigo_estudiante__iexact=code).exists():
             raise forms.ValidationError("Ya existe un monitor con este codigo.")
         return code
+
+    def clean_department(self):
+        department = self.cleaned_data["department"]
+        if self.actor and self.actor.role != UserRoleChoices.ADMIN:
+            return self.actor.department
+        return department
 
 
 class MonitorBulkUploadForm(forms.Form):

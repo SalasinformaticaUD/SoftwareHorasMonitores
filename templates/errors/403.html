@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block title %}Acceso restringido{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-7">
+    <div class="card shadow-sm">
+      <div class="card-body text-center">
+        <div class="admin-kicker">403</div>
+        <h1 class="h4 mb-2">No tienes permiso para entrar aqui</h1>
+        <p class="text-muted">La ruta existe, pero tu rol no tiene acceso a esta informacion.</p>
+        <div class="d-flex justify-content-center gap-2 flex-wrap">
+          {% if request.user.is_authenticated and request.user.role == "monitor" %}
+            <a class="btn btn-primary" href="{% url 'monitor-hours' %}">Ir a mis horas</a>
+          {% elif request.user.is_authenticated %}
+            <a class="btn btn-primary" href="{% url 'leader-dashboard' %}">Ir al dashboard</a>
+          {% else %}
+            <a class="btn btn-primary" href="{% url 'login' %}">Ingresar</a>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

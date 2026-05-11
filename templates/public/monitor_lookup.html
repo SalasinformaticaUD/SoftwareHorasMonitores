@@ -1,7 +1,7 @@
 ﻿{% extends "base.html" %}
 {% load common_extras %}
 
-{% block title %}Consulta pública{% endblock %}
+{% block title %}Consulta de monitores{% endblock %}
 
 {% block content %}
 <style>
@@ -42,7 +42,8 @@
   <div class="col-lg-4">
     <div class="card shadow-sm">
       <div class="card-body">
-        <h1 class="h4 mb-3">Consulta pública de horas</h1>
+        <h1 class="h4 mb-2">Consulta de horas por monitor</h1>
+        <p class="text-muted small">Disponible para administradores y lideres. Los lideres solo consultan monitores de su dependencia.</p>
         <form method="post">
           {% csrf_token %}
           {{ form.as_p }}

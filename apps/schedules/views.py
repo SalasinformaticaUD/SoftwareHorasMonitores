@@ -6,8 +6,9 @@ from django.utils import timezone
 from django.views.generic import TemplateView
 
 from apps.common.choices import UserRoleChoices
-from apps.common.web import AdminOrLeaderRequiredMixin, AdminRequiredMixin, paginate_collection
+from apps.common.web import AdminOrLeaderRequiredMixin, paginate_collection
 from apps.monitors.models import Monitor
+from apps.monitors.selectors import visible_monitors_for_user
 from apps.schedules.forms import ScheduleBulkUploadForm, ScheduleExceptionForm, ScheduleForm
 from apps.schedules.selectors import visible_schedule_exceptions_for_user
 from apps.schedules.models import Schedule
@@ -20,7 +21,7 @@ from apps.schedules.services import (
 )
 
 
-class ScheduleAdminView(AdminRequiredMixin, TemplateView):
+class ScheduleAdminView(AdminOrLeaderRequiredMixin, TemplateView):
     template_name = "admin_portal/schedules/index.html"
     paginate_by = 12
     sort_fields = {
@@ -31,7 +32,9 @@ class ScheduleAdminView(AdminRequiredMixin, TemplateView):
     }
 
     def _schedule_queryset(self):
-        queryset = Schedule.objects.select_related("monitor", "monitor__user")
+        queryset = Schedule.objects.select_related("monitor", "monitor__user").filter(
+            monitor__in=visible_monitors_for_user(self.request.user)
+        )
         search = self.request.GET.get("q", "").strip()
         monitor_id = self.request.GET.get("monitor", "").strip()
         day = self.request.GET.get("day", "").strip()
@@ -64,10 +67,13 @@ class ScheduleAdminView(AdminRequiredMixin, TemplateView):
         schedule_id = self.request.GET.get("edit") or self.request.POST.get("schedule_id")
         if not schedule_id:
             return None
-        return get_object_or_404(Schedule.objects.select_related("monitor"), pk=schedule_id)
+        return get_object_or_404(
+            Schedule.objects.select_related("monitor").filter(monitor__in=visible_monitors_for_user(self.request.user)),
+            pk=schedule_id,
+        )
 
     def _calendar_context(self):
-        monitors = Monitor.objects.select_related("user").filter(is_active=True).order_by("full_name")
+        monitors = visible_monitors_for_user(self.request.user).select_related("user").filter(is_active=True).order_by("full_name")
         selected_monitor_id = self.request.GET.get("calendar_monitor") or self.request.GET.get("monitor")
         selected_monitor = monitors.filter(pk=selected_monitor_id).first() if selected_monitor_id else monitors.first()
         schedules = []
@@ -108,7 +114,7 @@ class ScheduleAdminView(AdminRequiredMixin, TemplateView):
         editing_schedule = kwargs.get("editing_schedule")
         if editing_schedule is None:
             editing_schedule = self._selected_schedule()
-        monitors = Monitor.objects.select_related("user").filter(is_active=True).order_by("full_name")
+        monitors = visible_monitors_for_user(self.request.user).select_related("user").filter(is_active=True).order_by("full_name")
         queryset = self._schedule_queryset()
         pagination = paginate_collection(self.request, queryset, per_page=self.paginate_by)
         context.update(
@@ -121,10 +127,10 @@ class ScheduleAdminView(AdminRequiredMixin, TemplateView):
                 "schedules": pagination["page_obj"].object_list,
                 "day_choices": Schedule.Weekday.choices[:6],
                 "stats": {
-                    "total": Schedule.objects.count(),
-                    "active": Schedule.objects.filter(is_active=True).count(),
-                    "inactive": Schedule.objects.filter(is_active=False).count(),
-                    "monitors": Monitor.objects.filter(schedules__isnull=False).distinct().count(),
+                    "total": self._schedule_queryset().count(),
+                    "active": self._schedule_queryset().filter(is_active=True).count(),
+                    "inactive": self._schedule_queryset().filter(is_active=False).count(),
+                    "monitors": visible_monitors_for_user(self.request.user).filter(schedules__isnull=False).distinct().count(),
                 },
                 **pagination,
                 **self._calendar_context(),
@@ -138,7 +144,10 @@ class ScheduleAdminView(AdminRequiredMixin, TemplateView):
             form = ScheduleBulkUploadForm(request.POST, request.FILES)
             if form.is_valid():
                 try:
-                    result = import_schedule_rows_from_workbook(uploaded_file=form.cleaned_data["source_file"])
+                    result = import_schedule_rows_from_workbook(
+                        uploaded_file=form.cleaned_data["source_file"],
+                        actor=request.user,
+                    )
                     messages.success(request, f"Carga procesada: {result.created} horarios creados.")
                     return self.render_to_response(self.get_context_data(upload_form=form, upload_result=result))
                 except ValidationError as exc:
@@ -146,20 +155,26 @@ class ScheduleAdminView(AdminRequiredMixin, TemplateView):
             return self.render_to_response(self.get_context_data(upload_form=form))
 
         if action == "delete":
-            schedule = get_object_or_404(Schedule, pk=request.POST.get("schedule_id"))
+            schedule = get_object_or_404(
+                Schedule.objects.filter(monitor__in=visible_monitors_for_user(request.user)),
+                pk=request.POST.get("schedule_id"),
+            )
             delete_schedule(schedule=schedule)
             messages.success(request, "Horario eliminado correctamente.")
             return redirect("admin-schedules")
 
         instance = None
         if request.POST.get("schedule_id"):
-            instance = get_object_or_404(Schedule, pk=request.POST.get("schedule_id"))
-        monitors = Monitor.objects.filter(is_active=True).order_by("full_name")
+            instance = get_object_or_404(
+                Schedule.objects.filter(monitor__in=visible_monitors_for_user(request.user)),
+                pk=request.POST.get("schedule_id"),
+            )
+        monitors = visible_monitors_for_user(request.user).filter(is_active=True).order_by("full_name")
         form = ScheduleForm(request.POST, instance=instance, monitors=monitors)
         if not form.is_valid():
             return self.render_to_response(self.get_context_data(form=form, editing_schedule=instance))
         try:
-            save_schedule(instance=instance, **form.cleaned_data)
+            save_schedule(instance=instance, actor=request.user, **form.cleaned_data)
             messages.success(request, "Horario guardado correctamente.")
             return redirect("admin-schedules")
         except ValidationError as exc:

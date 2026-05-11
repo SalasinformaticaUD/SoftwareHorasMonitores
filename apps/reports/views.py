@@ -4,7 +4,7 @@ from django.views import View
 from django.views.generic import FormView, TemplateView
 
 from apps.common.choices import DepartmentChoices, UserRoleChoices
-from apps.common.web import AdminOrLeaderRequiredMixin, enforce_public_lookup_limit
+from apps.common.web import AdminOrLeaderRequiredMixin, MonitorRequiredMixin, enforce_public_lookup_limit
 from apps.monitors.selectors import visible_monitors_for_user
 from apps.reports.forms import PublicMonitorLookupForm
 from apps.reports.selectors import (
@@ -55,9 +55,10 @@ class DepartmentDashboardExportView(AdminOrLeaderRequiredMixin, View):
         )
 
 
-class PublicMonitorLookupView(FormView):
+class PublicMonitorLookupView(AdminOrLeaderRequiredMixin, FormView):
     template_name = "public/monitor_lookup.html"
     form_class = PublicMonitorLookupForm
+    permission_denied_message = "La consulta por codigo esta disponible solo para administradores y lideres."
 
     def form_valid(self, form):
         try:
@@ -65,13 +66,23 @@ class PublicMonitorLookupView(FormView):
         except PermissionDenied as exc:
             form.add_error(None, str(exc))
             return self.form_invalid(form)
-        result = public_monitor_lookup(
-            codigo_estudiante=form.cleaned_data["codigo_estudiante"],
-        )
+        department = None if self.request.user.role == UserRoleChoices.ADMIN else self.request.user.department
+        result = public_monitor_lookup(codigo_estudiante=form.cleaned_data["codigo_estudiante"], department=department)
         context = self.get_context_data(form=form, result=result)
         return self.render_to_response(context)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context.setdefault("result", None)
+        context["lookup_mode"] = "leader"
+        return context
+
+
+class MonitorSelfHoursView(MonitorRequiredMixin, TemplateView):
+    template_name = "dashboard/monitor_self_hours.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        monitor = getattr(self.request.user, "monitor_profile", None)
+        context["result"] = monitor_lookup_result(monitor=monitor) if monitor else None
         return context

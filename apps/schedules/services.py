@@ -11,6 +11,7 @@ from apps.attendance.validators import validate_excel_extension
 from apps.common.choices import UserRoleChoices
 from apps.common.utils import normalize_text
 from apps.monitors.models import Monitor
+from apps.monitors.selectors import visible_monitors_for_user
 from apps.schedules.models import Schedule, ScheduleException
 from apps.work_sessions.services import sync_sessions_for_exception_change
 
@@ -203,7 +204,10 @@ def save_schedule(
     end_time,
     location: str,
     is_active: bool = True,
+    actor=None,
 ) -> Schedule:
+    if actor and actor.role != UserRoleChoices.ADMIN and monitor.department != actor.department:
+        raise ValidationError("Solo puedes gestionar horarios de tu propia dependencia.")
     schedule = instance or Schedule()
     schedule.monitor = monitor
     schedule.weekday = weekday
@@ -264,7 +268,7 @@ def _parse_weekday_value(value: Any) -> int:
     return weekday
 
 
-def import_schedule_rows_from_workbook(*, uploaded_file) -> ScheduleBulkImportResult:
+def import_schedule_rows_from_workbook(*, uploaded_file, actor=None) -> ScheduleBulkImportResult:
     validate_excel_extension(uploaded_file.name)
     workbook = load_workbook(uploaded_file, read_only=True, data_only=True)
     worksheet = workbook.active
@@ -290,7 +294,10 @@ def import_schedule_rows_from_workbook(*, uploaded_file) -> ScheduleBulkImportRe
         try:
             if not monitor_email:
                 raise ValidationError("El correo del monitor es obligatorio.")
-            monitor = Monitor.objects.select_related("user").filter(user__email__iexact=monitor_email).first()
+            monitors = Monitor.objects.select_related("user")
+            if actor:
+                monitors = visible_monitors_for_user(actor).select_related("user")
+            monitor = monitors.filter(user__email__iexact=monitor_email).first()
             if monitor is None:
                 result.skipped.append(
                     ScheduleRowIssue(row_number=row_number, monitor_email=monitor_email, reason="Monitor no encontrado.")
@@ -304,6 +311,7 @@ def import_schedule_rows_from_workbook(*, uploaded_file) -> ScheduleBulkImportRe
                     end_time=_parse_time_value(values[mapped_headers["end_time"]]),
                     location=str(values[mapped_headers["location"]] or "").strip(),
                     is_active=True,
+                    actor=actor,
                 )
             result.created += 1
         except Exception as exc:

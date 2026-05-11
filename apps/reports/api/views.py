@@ -1,4 +1,4 @@
-from rest_framework import permissions, response, status, views, viewsets
+from rest_framework import response, status, views, viewsets
 
 from apps.common.permissions import IsAdminOrLeader
 from apps.common.throttling import PublicMonitorLookupThrottle
@@ -94,12 +94,12 @@ class GenerateReportAPIView(views.APIView):
 
 
 class PublicMonitorLookupAPIView(views.APIView):
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [IsAdminOrLeader]
     throttle_classes = [PublicMonitorLookupThrottle]
 
     def get(self, request):
         code = request.query_params.get("codigo_estudiante", "")
-        department = request.query_params.get("department", "")
+        department = None if request.user.role == "admin" else request.user.department
         result = public_monitor_lookup(codigo_estudiante=code, department=department or None)
         if not result:
             return response.Response({"detail": "Monitor no encontrado."}, status=status.HTTP_404_NOT_FOUND)

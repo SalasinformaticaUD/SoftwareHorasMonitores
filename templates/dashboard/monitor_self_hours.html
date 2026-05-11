@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% load common_extras %}
+
+{% block title %}Mis horas{% endblock %}
+
+{% block content %}
+<div class="admin-module">
+  <div class="admin-crumb">
+    <span>Monitor</span><span>/</span><strong>Mis horas</strong>
+  </div>
+
+  <section class="admin-hero">
+    <div>
+      <div class="admin-kicker">Consulta personal</div>
+      <h1 class="admin-title">Mis horas registradas</h1>
+      <p class="admin-subtitle">Este resumen corresponde unicamente al monitor vinculado con tu cuenta institucional.</p>
+    </div>
+  </section>
+
+  {% if result %}
+    <div class="card admin-card mb-4">
+      <div class="card-body">
+        <h2 class="h5">{{ result.monitor.full_name }}</h2>
+        <p class="mb-1">Codigo: {{ result.monitor.codigo_estudiante }}</p>
+        <p class="mb-0">Dependencia: {{ result.monitor.get_department_display }}</p>
+      </div>
+    </div>
+
+    <div class="row g-3">
+      <div class="col-md-4">
+        <div class="card admin-card lookup-stat-card"><div class="card-body"><span class="lookup-stat-label">Horas turno</span><div class="lookup-stat-value">{{ result.metrics.normal_minutes|minutes_to_hours }} h</div></div></div>
+      </div>
+      <div class="col-md-4">
+        <div class="card admin-card lookup-stat-card"><div class="card-body"><span class="lookup-stat-label">Extra aprobadas</span><div class="lookup-stat-value">{{ result.metrics.approved_overtime_minutes|minutes_to_hours }} h</div></div></div>
+      </div>
+      <div class="col-md-4">
+        <div class="card admin-card lookup-stat-card"><div class="card-body"><span class="lookup-stat-label">Total</span><div class="lookup-stat-value">{{ result.metrics.net_total_minutes|minutes_to_hours }} h</div></div></div>
+      </div>
+      <div class="col-md-4">
+        <div class="card admin-card lookup-stat-card"><div class="card-body"><span class="lookup-stat-label">Extra pendientes</span><div class="lookup-stat-value">{{ result.metrics.pending_overtime_minutes|minutes_to_hours }} h</div></div></div>
+      </div>
+      <div class="col-md-4">
+        <div class="card admin-card lookup-stat-card"><div class="card-body"><span class="lookup-stat-label">Anotaciones</span><div class="lookup-stat-value">{{ result.metrics.annotation_delta_minutes|minutes_to_hours }} h</div></div></div>
+      </div>
+      <div class="col-md-4">
+        <div class="card admin-card lookup-stat-card"><div class="card-body"><span class="lookup-stat-label">Faltan para 192 h</span><div class="lookup-stat-value">{{ result.metrics.remaining_minutes|minutes_to_hours }} h</div></div></div>
+      </div>
+    </div>
+
+    <div class="card admin-card mt-4">
+      <div class="card-body">
+        <h2 class="h5 mb-3">Historial reciente</h2>
+        <div class="table-responsive">
+          <table class="table table-hover align-middle">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Entrada</th>
+                <th>Salida</th>
+                <th>Normales</th>
+                <th>Extra</th>
+                <th>Retraso</th>
+                <th>Estado extra</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for session in result.recent_sessions %}
+                <tr>
+                  <td><strong>{{ session.work_day }}</strong></td>
+                  <td>{{ session.actual_start|time:"H:i" }}</td>
+                  <td>{{ session.actual_end|time:"H:i" }}</td>
+                  <td>{{ session.normal_minutes|minutes_to_hours }} h</td>
+                  <td>{{ session.overtime_minutes|minutes_to_hours }} h</td>
+                  <td>{{ session.late_minutes|minutes_to_hours }} h</td>
+                  <td>{{ session.get_overtime_status_display }}</td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="7"><div class="empty-state">Todavia no hay sesiones registradas para tu cuenta.</div></td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  {% else %}
+    <div class="card admin-card">
+      <div class="card-body">
+        <div class="empty-state">Tu usuario aun no tiene un monitor vinculado. Solicita la vinculacion al lider de tu dependencia.</div>
+      </div>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

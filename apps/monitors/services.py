@@ -68,7 +68,10 @@ def create_monitor_with_user(
     email: str,
     department: str,
     request=None,
+    actor=None,
 ) -> Monitor:
+    if actor and actor.role != UserRoleChoices.ADMIN and department != actor.department:
+        raise ValidationError("Solo puedes crear monitores de tu propia dependencia.")
     email = email.strip().lower()
     full_name = full_name.strip()
     codigo_estudiante = str(codigo_estudiante).strip()
@@ -146,7 +149,7 @@ def _header_map(headers) -> dict[str, int]:
     return {normalize_text(str(header or "").strip()): index for index, header in enumerate(headers)}
 
 
-def import_monitors_from_workbook(*, uploaded_file, request=None) -> MonitorImportResult:
+def import_monitors_from_workbook(*, uploaded_file, request=None, actor=None) -> MonitorImportResult:
     validate_excel_extension(uploaded_file.name)
     workbook = load_workbook(uploaded_file, read_only=True, data_only=True)
     worksheet = workbook.active
@@ -172,6 +175,11 @@ def import_monitors_from_workbook(*, uploaded_file, request=None) -> MonitorImpo
             full_name = str(row_values[mapped_headers["full_name"]] or "").strip()
             codigo = str(row_values[mapped_headers["codigo_estudiante"]] or "").strip()
             department = _normalize_department(row_values[mapped_headers["department"]])
+            if actor and actor.role != UserRoleChoices.ADMIN and department != actor.department:
+                result.skipped.append(
+                    ImportIssue(row_number=row_number, email=email or "-", reason="Pertenece a otra dependencia.")
+                )
+                continue
             if not email or not full_name or not codigo:
                 raise ValidationError("Email, nombre y codigo son obligatorios.")
             if User.objects.filter(email__iexact=email).exists() or User.objects.filter(username__iexact=email).exists():
@@ -186,6 +194,7 @@ def import_monitors_from_workbook(*, uploaded_file, request=None) -> MonitorImpo
                 email=email,
                 department=department,
                 request=request,
+                actor=actor,
             )
             result.created += 1
         except Exception as exc:

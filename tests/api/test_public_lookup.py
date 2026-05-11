@@ -1,11 +1,13 @@
 import pytest
 
 from apps.common.choices import DepartmentChoices, OvertimeStatusChoices
-from tests.factories import MonitorFactory, WorkSessionFactory
+from tests.factories import MonitorFactory, UserFactory, WorkSessionFactory
 
 
 @pytest.mark.django_db
 def test_public_lookup_returns_limited_summary(api_client):
+    leader = UserFactory(department=DepartmentChoices.PHYSICS)
+    api_client.force_authenticate(user=leader)
     monitor = MonitorFactory(codigo_estudiante="20231234", department=DepartmentChoices.PHYSICS)
     WorkSessionFactory(
         monitor=monitor,
@@ -31,6 +33,8 @@ def test_public_lookup_returns_limited_summary(api_client):
 
 @pytest.mark.django_db
 def test_public_lookup_requires_correct_department(api_client):
+    leader = UserFactory(department=DepartmentChoices.ELECTRICAL)
+    api_client.force_authenticate(user=leader)
     MonitorFactory(codigo_estudiante="20231234", department=DepartmentChoices.PHYSICS)
 
     response = api_client.get(
@@ -39,4 +43,14 @@ def test_public_lookup_requires_correct_department(api_client):
     )
 
     assert response.status_code == 404
+
+
+@pytest.mark.django_db
+def test_public_lookup_rejects_anonymous_users(api_client):
+    response = api_client.get(
+        "/api/v1/reports/public-monitor-lookup/",
+        {"codigo_estudiante": "20231234"},
+    )
+
+    assert response.status_code == 403
 

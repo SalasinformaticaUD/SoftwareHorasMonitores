@@ -1,7 +1,7 @@
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
-from django.contrib.auth.views import LoginView, LogoutView, PasswordResetCompleteView, PasswordResetConfirmView
+from django.contrib.auth.views import LogoutView, PasswordResetCompleteView, PasswordResetConfirmView
 from django.shortcuts import redirect
 from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
@@ -13,7 +13,9 @@ from apps.reports.views import (
     LeaderDashboardView,
     MonitorRecordsDetailView,
     PublicMonitorLookupView,
+    MonitorSelfHoursView,
 )
+from apps.users.views import RoleAwareLoginView
 from apps.schedules.views import ScheduleExceptionListView
 from apps.monitors.views import MonitorAdminView
 from apps.schedules.views import ScheduleAdminView
@@ -22,7 +24,13 @@ from apps.annotations.views import AnnotationManagementView
 
 
 def root_redirect(_request):
-    return redirect("public-monitor-lookup")
+    user = getattr(_request, "user", None)
+    if user and user.is_authenticated:
+        if user.role == "monitor":
+            return redirect("monitor-hours")
+        if user.role in {"admin", "leader"}:
+            return redirect("leader-dashboard")
+    return redirect("login")
 
 
 urlpatterns = [
@@ -31,7 +39,7 @@ urlpatterns = [
     path("admin/monitors/", MonitorAdminView.as_view(), name="admin-monitors"),
     path("admin/schedules/", ScheduleAdminView.as_view(), name="admin-schedules"),
     path("admin/", admin.site.urls),
-    path("login/", LoginView.as_view(template_name="registration/login.html"), name="login"),
+    path("login/", RoleAwareLoginView.as_view(), name="login"),
     path("logout/", LogoutView.as_view(next_page="public-monitor-lookup"), name="logout"),
     path(
         "accounts/reset/<uidb64>/<token>/",
@@ -63,6 +71,7 @@ urlpatterns = [
     path("excepciones/", ScheduleExceptionListView.as_view(), name="schedule-exceptions"),
     path("overtime/review/", OvertimeReviewListView.as_view(), name="overtime-review"),
     path("consulta/", PublicMonitorLookupView.as_view(), name="public-monitor-lookup"),
+    path("mis-horas/", MonitorSelfHoursView.as_view(), name="monitor-hours"),
     path("api/schema/", SpectacularAPIView.as_view(), name="api-schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="api-schema"), name="api-docs"),
     path("api/v1/auth/", include("apps.users.api.urls")),
@@ -74,3 +83,6 @@ urlpatterns = [
     path("api/v1/reports/", include("apps.reports.api.urls")),
     path("api/v1/notifications/", include("apps.notifications.api.urls")),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+handler403 = "apps.common.views.permission_denied"
+handler404 = "apps.common.views.page_not_found"

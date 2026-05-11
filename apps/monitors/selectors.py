@@ -10,6 +10,8 @@ def visible_monitors_for_user(user) -> QuerySet[Monitor]:
     queryset = Monitor.objects.all()
     if user.role == UserRoleChoices.ADMIN:
         return queryset
+    if user.role == UserRoleChoices.MONITOR:
+        return queryset.filter(user=user)
     return queryset.filter(department=user.department)
 
 

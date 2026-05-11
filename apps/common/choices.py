@@ -10,6 +10,7 @@ class DepartmentChoices(models.TextChoices):
 class UserRoleChoices(models.TextChoices):
     ADMIN = "admin", "Administrador"
     LEADER = "leader", "Líder"
+    MONITOR = "monitor", "Monitor"
 
 
 class ImportJobStatusChoices(models.TextChoices):

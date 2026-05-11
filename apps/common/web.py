@@ -18,6 +18,12 @@ class AdminOrLeaderRequiredMixin(LoginRequiredMixin, UserPassesTestMixin):
         }
 
 
+class AdminRequiredMixin(LoginRequiredMixin, UserPassesTestMixin):
+    def test_func(self):
+        user = self.request.user
+        return user.is_authenticated and user.is_active and user.role == UserRoleChoices.ADMIN
+
+
 def paginate_collection(request, items, *, per_page: int = 20, page_param: str = "page") -> dict:
     paginator = Paginator(items, per_page)
     page_obj = paginator.get_page(request.GET.get(page_param) or 1)

@@ -1,7 +1,7 @@
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
-from django.contrib.auth.views import LoginView, LogoutView
+from django.contrib.auth.views import LoginView, LogoutView, PasswordResetCompleteView, PasswordResetConfirmView
 from django.shortcuts import redirect
 from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
@@ -15,6 +15,8 @@ from apps.reports.views import (
     PublicMonitorLookupView,
 )
 from apps.schedules.views import ScheduleExceptionListView
+from apps.monitors.views import MonitorAdminView
+from apps.schedules.views import ScheduleAdminView
 from apps.work_sessions.views import OvertimeReviewListView
 from apps.annotations.views import AnnotationManagementView
 
@@ -26,9 +28,24 @@ def root_redirect(_request):
 urlpatterns = [
     path("", root_redirect, name="root"),
     path("healthz/", health_check, name="healthz"),
+    path("admin/monitors/", MonitorAdminView.as_view(), name="admin-monitors"),
+    path("admin/schedules/", ScheduleAdminView.as_view(), name="admin-schedules"),
     path("admin/", admin.site.urls),
     path("login/", LoginView.as_view(template_name="registration/login.html"), name="login"),
     path("logout/", LogoutView.as_view(next_page="public-monitor-lookup"), name="logout"),
+    path(
+        "accounts/reset/<uidb64>/<token>/",
+        PasswordResetConfirmView.as_view(
+            template_name="registration/password_reset_confirm.html",
+            success_url="/accounts/reset/complete/",
+        ),
+        name="password_reset_confirm",
+    ),
+    path(
+        "accounts/reset/complete/",
+        PasswordResetCompleteView.as_view(template_name="registration/password_reset_complete.html"),
+        name="password_reset_complete",
+    ),
     path("dashboard/", LeaderDashboardView.as_view(), name="leader-dashboard"),
     path(
         "dashboard/monitor/<uuid:monitor_id>/registros/",

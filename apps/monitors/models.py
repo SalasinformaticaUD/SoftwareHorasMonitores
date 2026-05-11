@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 
 from apps.common.choices import DepartmentChoices
@@ -6,6 +7,13 @@ from apps.common.utils import normalize_text
 
 
 class Monitor(BaseModel):
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="monitor_profile",
+    )
     codigo_estudiante = models.CharField(max_length=20, unique=True)
     full_name = models.CharField(max_length=255)
     normalized_full_name = models.CharField(max_length=255, editable=False, db_index=True)

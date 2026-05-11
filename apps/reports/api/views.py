@@ -99,7 +99,8 @@ class PublicMonitorLookupAPIView(views.APIView):
 
     def get(self, request):
         code = request.query_params.get("codigo_estudiante", "")
-        result = public_monitor_lookup(codigo_estudiante=code)
+        department = request.query_params.get("department", "")
+        result = public_monitor_lookup(codigo_estudiante=code, department=department or None)
         if not result:
             return response.Response({"detail": "Monitor no encontrado."}, status=status.HTTP_404_NOT_FOUND)
         payload = {

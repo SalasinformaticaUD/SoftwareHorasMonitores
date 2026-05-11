@@ -19,6 +19,7 @@ class Schedule(BaseModel):
     weekday = models.PositiveSmallIntegerField(choices=Weekday.choices)
     start_time = models.TimeField()
     end_time = models.TimeField()
+    location = models.CharField(max_length=255, blank=True, default="")
     is_active = models.BooleanField(default=True)
 
     class Meta:
@@ -33,6 +34,18 @@ class Schedule(BaseModel):
     def clean(self):
         if self.end_time <= self.start_time:
             raise ValidationError("La hora fin debe ser posterior a la hora inicio.")
+        if self.monitor_id and self.is_active:
+            overlapping = Schedule.objects.filter(
+                monitor_id=self.monitor_id,
+                weekday=self.weekday,
+                is_active=True,
+                start_time__lt=self.end_time,
+                end_time__gt=self.start_time,
+            )
+            if self.pk:
+                overlapping = overlapping.exclude(pk=self.pk)
+            if overlapping.exists():
+                raise ValidationError("El horario se cruza con otro bloque activo del mismo monitor.")
 
     def __str__(self) -> str:
         return f"{self.monitor.full_name} - {self.get_weekday_display()}"

@@ -707,6 +707,215 @@ input[type="checkbox"] {
   background: rgba(255, 250, 244, 0.72);
 }
 
+.admin-module {
+  --admin-radius: 0.5rem;
+  --admin-border: rgba(118, 19, 22, 0.12);
+  --admin-surface: rgba(255, 253, 249, 0.96);
+  --admin-muted-surface: rgba(251, 242, 237, 0.92);
+}
+
+.admin-module .admin-crumb {
+  display: flex;
+  gap: 0.45rem;
+  align-items: center;
+  margin-bottom: 0.75rem;
+  color: var(--ud-muted);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.admin-module .admin-hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+  padding: 1.35rem;
+  margin-bottom: 1.25rem;
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius);
+  background: linear-gradient(135deg, rgba(255, 253, 249, 0.98), rgba(251, 242, 237, 0.92));
+}
+
+.admin-module .admin-kicker {
+  margin-bottom: 0.35rem;
+  color: var(--ud-red-deep);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.admin-module .admin-title {
+  margin: 0;
+  color: var(--ud-red-deep);
+  font-size: clamp(1.55rem, 2.2vw, 2rem);
+}
+
+.admin-module .admin-subtitle {
+  max-width: 52rem;
+  margin: 0.45rem 0 0;
+  color: var(--ud-muted);
+}
+
+.admin-module .admin-card {
+  border-radius: var(--admin-radius);
+  background: var(--admin-surface);
+}
+
+.admin-module .admin-card .card-body::before {
+  content: "";
+  position: absolute;
+  left: 1rem;
+  right: 1rem;
+  top: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--ud-red-deep), var(--ud-gold));
+}
+
+.admin-module .stat-card {
+  min-height: 7rem;
+}
+
+.admin-module .stat-label {
+  color: var(--ud-muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.admin-module .stat-value {
+  color: var(--ud-red-deep);
+  font-family: "Merriweather", Georgia, serif;
+  font-size: 2rem;
+  font-weight: 900;
+}
+
+.admin-module .table-responsive {
+  border-radius: var(--admin-radius);
+  overflow-x: auto;
+}
+
+.admin-module .table thead th {
+  background: var(--ud-red-deep);
+  color: #fff;
+  font-family: "Source Sans 3", "Segoe UI", sans-serif;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.admin-module .table > :not(caption) > * > * {
+  padding: 0.72rem 0.8rem;
+}
+
+.admin-module .badge {
+  border-radius: 0.25rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.admin-module .btn,
+.admin-module .form-control,
+.admin-module .form-select {
+  border-radius: 0.25rem;
+}
+
+.admin-module .btn-icon {
+  display: inline-flex;
+  gap: 0.35rem;
+  align-items: center;
+  justify-content: center;
+}
+
+.admin-module .empty-state {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--ud-muted);
+}
+
+.admin-module .admin-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.admin-module .weekly-calendar {
+  display: grid;
+  grid-template-columns: 4.5rem repeat(6, minmax(8rem, 1fr));
+  min-width: 880px;
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius);
+  background: var(--admin-muted-surface);
+  overflow: hidden;
+}
+
+.admin-module .calendar-head,
+.admin-module .calendar-time,
+.admin-module .calendar-day {
+  border-bottom: 1px solid var(--admin-border);
+  border-right: 1px solid var(--admin-border);
+}
+
+.admin-module .calendar-head {
+  padding: 0.75rem;
+  background: var(--ud-red-deep);
+  color: #fff;
+  font-weight: 800;
+  text-align: center;
+}
+
+.admin-module .calendar-time {
+  padding: 0.5rem;
+  color: var(--ud-muted);
+  font-size: 0.85rem;
+}
+
+.admin-module .calendar-day {
+  position: relative;
+  min-height: 34rem;
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      rgba(118, 19, 22, 0.05) 0,
+      rgba(118, 19, 22, 0.05) 1px,
+      transparent 1px,
+      transparent 12.5%
+    ),
+    rgba(255, 255, 255, 0.52);
+}
+
+.admin-module .calendar-block {
+  position: absolute;
+  left: 0.5rem;
+  right: 0.5rem;
+  min-height: 2.4rem;
+  padding: 0.45rem 0.55rem;
+  border-left: 4px solid var(--ud-gold);
+  border-radius: 0.35rem;
+  background: linear-gradient(135deg, var(--ud-red-deep), var(--ud-red-soft));
+  color: #fff;
+  box-shadow: 0 10px 20px rgba(84, 0, 6, 0.18);
+  overflow: hidden;
+}
+
+.admin-module .calendar-block strong,
+.admin-module .calendar-block span {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 767.98px) {
+  .admin-module .admin-hero {
+    flex-direction: column;
+  }
+
+  .admin-module .admin-form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 @keyframes riseIn {
   from {
     opacity: 0;

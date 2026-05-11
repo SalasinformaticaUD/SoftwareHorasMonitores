@@ -25,7 +25,7 @@ class MonitorDepartmentFilter(admin.SimpleListFilter):
 @admin.register(Schedule)
 class ScheduleAdmin(admin.ModelAdmin):
     change_list_template = "admin/schedules/schedule/change_list.html"
-    list_display = ("monitor", "weekday", "start_time", "end_time", "is_active")
+    list_display = ("monitor", "weekday", "start_time", "end_time", "location", "is_active")
     list_filter = ("weekday", "is_active", MonitorDepartmentFilter)
     search_fields = ("monitor__full_name", "monitor__codigo_estudiante")
 
@@ -100,6 +100,7 @@ class ScheduleExceptionAdmin(admin.ModelAdmin):
             end_date=form.cleaned_data["end_date"],
             department=form.cleaned_data["department"],
             ignore_lateness=form.cleaned_data["ignore_lateness"],
+            approve_overtime=form.cleaned_data["approve_overtime"],
             is_active=form.cleaned_data["is_active"],
         )
         if updated_sessions:

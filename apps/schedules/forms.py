@@ -2,7 +2,8 @@ from django import forms
 
 from apps.attendance.validators import validate_excel_extension
 from apps.common.choices import DepartmentChoices, UserRoleChoices
-from apps.schedules.models import ScheduleException
+from apps.monitors.models import Monitor
+from apps.schedules.models import Schedule, ScheduleException
 
 
 class ScheduleImportForm(forms.Form):
@@ -12,6 +13,63 @@ class ScheduleImportForm(forms.Form):
         source_file = self.cleaned_data["source_file"]
         validate_excel_extension(source_file.name)
         return source_file
+
+
+class ScheduleBulkUploadForm(forms.Form):
+    source_file = forms.FileField(label="Archivo Excel (.xlsx)")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["source_file"].widget.attrs["class"] = "form-control"
+
+    def clean_source_file(self):
+        source_file = self.cleaned_data["source_file"]
+        validate_excel_extension(source_file.name)
+        return source_file
+
+
+class ScheduleForm(forms.ModelForm):
+    weekday = forms.ChoiceField(label="Dia", choices=Schedule.Weekday.choices[:6])
+
+    class Meta:
+        model = Schedule
+        fields = ("monitor", "weekday", "start_time", "end_time", "location", "is_active")
+        widgets = {
+            "start_time": forms.TimeInput(format="%H:%M", attrs={"type": "time"}),
+            "end_time": forms.TimeInput(format="%H:%M", attrs={"type": "time"}),
+        }
+        labels = {
+            "monitor": "Monitor",
+            "weekday": "Dia",
+            "start_time": "Hora inicio",
+            "end_time": "Hora fin",
+            "location": "Ubicacion",
+            "is_active": "Activo",
+        }
+
+    def __init__(self, *args, monitors=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["start_time"].input_formats = ["%H:%M", "%H:%M:%S"]
+        self.fields["end_time"].input_formats = ["%H:%M", "%H:%M:%S"]
+        self.fields["monitor"].queryset = monitors or Monitor.objects.filter(is_active=True).order_by("full_name")
+        for field in self.fields.values():
+            if isinstance(field.widget, forms.CheckboxInput):
+                field.widget.attrs["class"] = "form-check-input"
+            elif isinstance(field.widget, forms.Select):
+                field.widget.attrs["class"] = "form-select"
+            else:
+                field.widget.attrs["class"] = "form-control"
+
+    def clean_weekday(self):
+        return int(self.cleaned_data["weekday"])
+
+    def clean(self):
+        cleaned_data = super().clean()
+        start_time = cleaned_data.get("start_time")
+        end_time = cleaned_data.get("end_time")
+        if start_time and end_time and end_time <= start_time:
+            self.add_error("end_time", "La hora fin debe ser posterior a la hora inicio.")
+        return cleaned_data
 
 
 class ScheduleExceptionForm(forms.ModelForm):

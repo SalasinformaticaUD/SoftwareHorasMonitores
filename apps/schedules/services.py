@@ -1,9 +1,10 @@
 import re
 from dataclasses import dataclass, field
-from datetime import time
-from typing import Iterable, Optional
+from datetime import datetime, time
+from typing import Any, Iterable, Optional
 
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from openpyxl import load_workbook
 
 from apps.attendance.validators import validate_excel_extension
@@ -47,6 +48,21 @@ class ScheduleImportResult:
     skipped_rows: int = 0
     missing_monitors: list[str] = field(default_factory=list)
     unauthorized_monitors: list[str] = field(default_factory=list)
+
+
+@dataclass
+class ScheduleRowIssue:
+    row_number: int
+    monitor_email: str
+    reason: str
+
+
+@dataclass
+class ScheduleBulkImportResult:
+    total_rows: int = 0
+    created: int = 0
+    skipped: list[ScheduleRowIssue] = field(default_factory=list)
+    errors: list[ScheduleRowIssue] = field(default_factory=list)
 
 
 def _row_label_value(row_values: list[str], target_label: str) -> Optional[str]:
@@ -100,18 +116,27 @@ def _merge_schedule_blocks(blocks: Iterable[ParsedScheduleBlock]) -> list[Parsed
 
 
 def _save_schedule_block(*, monitor: Monitor, block: ParsedScheduleBlock, result: ScheduleImportResult) -> None:
-    schedule, created = Schedule.objects.get_or_create(
+    schedule = Schedule.objects.filter(
         monitor=monitor,
         weekday=block.weekday,
         start_time=block.start_time,
         end_time=block.end_time,
-        defaults={"is_active": True},
-    )
-    if created:
+    ).first()
+    if schedule is None:
+        schedule = Schedule(
+            monitor=monitor,
+            weekday=block.weekday,
+            start_time=block.start_time,
+            end_time=block.end_time,
+            is_active=True,
+        )
+        schedule.full_clean()
+        schedule.save()
         result.created += 1
         return
     if not schedule.is_active:
         schedule.is_active = True
+        schedule.full_clean()
         schedule.save(update_fields=["is_active", "updated_at"])
         result.reactivated += 1
 
@@ -151,17 +176,140 @@ def _flush_monitor_blocks(
     result.processed_monitors += 1
 
 
-def upsert_schedule(*, monitor, weekday: int, start_time, end_time, is_active: bool = True) -> Schedule:
-    schedule, _ = Schedule.objects.update_or_create(
+def upsert_schedule(*, monitor, weekday: int, start_time, end_time, location: str = "", is_active: bool = True) -> Schedule:
+    schedule = Schedule.objects.filter(
         monitor=monitor,
         weekday=weekday,
         start_time=start_time,
         end_time=end_time,
-        defaults={
-            "is_active": is_active,
-        },
+    ).first()
+    return save_schedule(
+        instance=schedule,
+        monitor=monitor,
+        weekday=weekday,
+        start_time=start_time,
+        end_time=end_time,
+        location=location,
+        is_active=is_active,
     )
+
+
+def save_schedule(
+    *,
+    instance: Optional[Schedule] = None,
+    monitor: Monitor,
+    weekday: int,
+    start_time,
+    end_time,
+    location: str,
+    is_active: bool = True,
+) -> Schedule:
+    schedule = instance or Schedule()
+    schedule.monitor = monitor
+    schedule.weekday = weekday
+    schedule.start_time = start_time
+    schedule.end_time = end_time
+    schedule.location = location
+    schedule.is_active = is_active
+    schedule.full_clean()
+    schedule.save()
     return schedule
+
+
+def delete_schedule(*, schedule: Schedule) -> None:
+    schedule.delete()
+
+
+def _schedule_header_map(headers) -> dict[str, int]:
+    return {normalize_text(str(header or "").strip()): index for index, header in enumerate(headers)}
+
+
+def _parse_time_value(value: Any) -> time:
+    if isinstance(value, time):
+        return value
+    if isinstance(value, datetime):
+        return value.time()
+    text = str(value or "").strip()
+    for fmt in ("%H:%M:%S", "%H:%M", "%I:%M %p"):
+        try:
+            return datetime.strptime(text, fmt).time()
+        except ValueError:
+            continue
+    raise ValidationError("Hora invalida. Usa formato HH:MM.")
+
+
+def _parse_weekday_value(value: Any) -> int:
+    if isinstance(value, int) and value in [choice[0] for choice in Schedule.Weekday.choices[:6]]:
+        return value
+    normalized = normalize_text(str(value or "").strip())
+    aliases = {
+        "lunes": Schedule.Weekday.MONDAY,
+        "monday": Schedule.Weekday.MONDAY,
+        "martes": Schedule.Weekday.TUESDAY,
+        "tuesday": Schedule.Weekday.TUESDAY,
+        "miercoles": Schedule.Weekday.WEDNESDAY,
+        "miércoles": Schedule.Weekday.WEDNESDAY,
+        "wednesday": Schedule.Weekday.WEDNESDAY,
+        "jueves": Schedule.Weekday.THURSDAY,
+        "thursday": Schedule.Weekday.THURSDAY,
+        "viernes": Schedule.Weekday.FRIDAY,
+        "friday": Schedule.Weekday.FRIDAY,
+        "sabado": Schedule.Weekday.SATURDAY,
+        "sábado": Schedule.Weekday.SATURDAY,
+        "saturday": Schedule.Weekday.SATURDAY,
+    }
+    weekday = aliases.get(normalized)
+    if weekday is None:
+        raise ValidationError("Dia no reconocido. Usa lunes a sabado.")
+    return weekday
+
+
+def import_schedule_rows_from_workbook(*, uploaded_file) -> ScheduleBulkImportResult:
+    validate_excel_extension(uploaded_file.name)
+    workbook = load_workbook(uploaded_file, read_only=True, data_only=True)
+    worksheet = workbook.active
+    rows = worksheet.iter_rows(values_only=True)
+    try:
+        headers = next(rows)
+    except StopIteration:
+        raise ValidationError("El archivo esta vacio.")
+
+    required_columns = ("email_monitor", "day", "start_time", "end_time", "location")
+    mapped_headers = _schedule_header_map(headers)
+    missing = [column for column in required_columns if column not in mapped_headers]
+    if missing:
+        raise ValidationError("Faltan columnas requeridas: " + ", ".join(missing))
+
+    result = ScheduleBulkImportResult()
+    for row_number, row in enumerate(rows, start=2):
+        values = list(row)
+        if not any(values):
+            continue
+        result.total_rows += 1
+        monitor_email = str(values[mapped_headers["email_monitor"]] or "").strip().lower()
+        try:
+            if not monitor_email:
+                raise ValidationError("El correo del monitor es obligatorio.")
+            monitor = Monitor.objects.select_related("user").filter(user__email__iexact=monitor_email).first()
+            if monitor is None:
+                result.skipped.append(
+                    ScheduleRowIssue(row_number=row_number, monitor_email=monitor_email, reason="Monitor no encontrado.")
+                )
+                continue
+            with transaction.atomic():
+                save_schedule(
+                    monitor=monitor,
+                    weekday=_parse_weekday_value(values[mapped_headers["day"]]),
+                    start_time=_parse_time_value(values[mapped_headers["start_time"]]),
+                    end_time=_parse_time_value(values[mapped_headers["end_time"]]),
+                    location=str(values[mapped_headers["location"]] or "").strip(),
+                    is_active=True,
+                )
+            result.created += 1
+        except Exception as exc:
+            reason = "; ".join(exc.messages) if hasattr(exc, "messages") else str(exc)
+            result.errors.append(ScheduleRowIssue(row_number=row_number, monitor_email=monitor_email or "-", reason=reason))
+    return result
 
 
 def _validate_exception_scope(*, actor, department) -> None:

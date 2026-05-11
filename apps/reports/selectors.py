@@ -168,6 +168,8 @@ def monitor_lookup_result(*, monitor):
     }
 
 
-def public_monitor_lookup(*, codigo_estudiante: str):
+def public_monitor_lookup(*, codigo_estudiante: str, department: str | None = None):
     monitor = active_monitor_by_code(codigo_estudiante)
+    if monitor and department and monitor.department != department:
+        monitor = None
     return monitor_lookup_result(monitor=monitor)

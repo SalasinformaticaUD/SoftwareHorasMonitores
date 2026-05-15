@@ -129,6 +129,13 @@
       </div>
       <div class="card shadow-sm mt-4">
         <div class="card-body">
+          <h3 class="h5 mb-1">Linea de tiempo multinivel</h3>
+          <p class="text-muted mb-3">Horarios programados, marcaciones y estados clasificados por color.</p>
+          {% include "includes/session_timeline.html" with timeline_rows=result.timeline_rows %}
+        </div>
+      </div>
+      <div class="card shadow-sm mt-4">
+        <div class="card-body">
           <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-2 mb-3">
             <div>
               <h3 class="h5 mb-1">Historial reciente</h3>

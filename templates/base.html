@@ -64,11 +64,13 @@
                     <a class="nav-chip {% if request.resolver_match.url_name == 'leader-dashboard' %}is-active{% endif %}" href="{% url 'leader-dashboard' %}">Dashboard</a>
                     <a class="nav-chip {% if request.resolver_match.url_name == 'admin-monitors' %}is-active{% endif %}" href="{% url 'admin-monitors' %}">Monitores</a>
                     <a class="nav-chip {% if request.resolver_match.url_name == 'admin-schedules' %}is-active{% endif %}" href="{% url 'admin-schedules' %}">Horarios</a>
-                    <a class="nav-chip {% if request.resolver_match.url_name == 'attendance-upload' %}is-active{% endif %}" href="{% url 'attendance-upload' %}">Importar</a>
+                    <a class="nav-chip {% if request.resolver_match.url_name == 'overtime-review' %}is-active{% endif %}" href="{% url 'overtime-review' %}">Horas extra</a>
+                    <a class="nav-chip {% if request.resolver_match.url_name == 'admin-commitment-acts' %}is-active{% endif %}" href="{% url 'admin-commitment-acts' %}">Actas</a>
+                    <a class="nav-chip {% if request.resolver_match.url_name == 'attendance-upload' %}is-active{% endif %}" href="{% url 'attendance-upload' %}">Importar Registros</a>
                     <a class="nav-chip {% if request.resolver_match.url_name == 'attendance-reconciliation' %}is-active{% endif %}" href="{% url 'attendance-reconciliation' %}">Conciliación</a>
                     <a class="nav-chip {% if request.resolver_match.url_name == 'annotations-manage' %}is-active{% endif %}" href="{% url 'annotations-manage' %}">Anotaciones</a>
+                    <a class="nav-chip {% if request.resolver_match.url_name == 'inconsistencies-manage' %}is-active{% endif %}" href="{% url 'inconsistencies-manage' %}">Inconsistencias</a>
                     <a class="nav-chip {% if request.resolver_match.url_name == 'schedule-exceptions' %}is-active{% endif %}" href="{% url 'schedule-exceptions' %}">Excepciones</a>
-                    <a class="nav-chip {% if request.resolver_match.url_name == 'overtime-review' %}is-active{% endif %}" href="{% url 'overtime-review' %}">Horas extra</a>
                     <a class="nav-chip {% if request.resolver_match.url_name == 'public-monitor-lookup' %}is-active{% endif %}" href="{% url 'public-monitor-lookup' %}">Consulta</a>
                   {% else %}
                     <a class="nav-chip {% if request.resolver_match.url_name == 'monitor-hours' %}is-active{% endif %}" href="{% url 'monitor-hours' %}">Mis horas</a>

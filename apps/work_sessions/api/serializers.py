@@ -35,6 +35,9 @@ class WorkSessionSerializer(serializers.ModelSerializer):
             "overtime_exception",
             "overtime_exception_name",
             "overtime_review_note",
+            "invalidated_by",
+            "invalidated_at",
+            "invalidation_reason",
         )
 
 

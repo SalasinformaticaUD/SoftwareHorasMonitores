@@ -10,7 +10,7 @@ from openpyxl import load_workbook
 from apps.attendance.validators import validate_excel_extension
 from apps.common.choices import UserRoleChoices
 from apps.common.utils import normalize_text
-from apps.monitors.models import Monitor
+from apps.monitors.models import Monitor, PROJECT_CHOICES
 from apps.monitors.selectors import visible_monitors_for_user
 from apps.schedules.models import Schedule, ScheduleException
 from apps.work_sessions.services import sync_sessions_for_exception_change
@@ -177,7 +177,38 @@ def _flush_monitor_blocks(
     result.processed_monitors += 1
 
 
-def upsert_schedule(*, monitor, weekday: int, start_time, end_time, location: str = "", is_active: bool = True) -> Schedule:
+def _project_lookup() -> dict[str, str]:
+    mapping = {"": ""}
+    for value, label in PROJECT_CHOICES:
+        mapping[value] = value
+        mapping[normalize_text(value)] = value
+        mapping[normalize_text(label)] = value
+    return mapping
+
+
+def _normalize_project(value: Any) -> str:
+    raw_value = str(value or "").strip()
+    if not raw_value:
+        return ""
+    project = _project_lookup().get(raw_value) or _project_lookup().get(normalize_text(raw_value))
+    if project is None:
+        raise ValidationError("Proyecto curricular no reconocido.")
+    return project
+
+
+def upsert_schedule(
+    *,
+    monitor,
+    weekday: int,
+    start_time,
+    end_time,
+    location: str = "",
+    is_active: bool = True,
+    asignatura: str = "",
+    grupo: str = "",
+    docente: str = "",
+    proyecto_curricular: str = "",
+) -> Schedule:
     schedule = Schedule.objects.filter(
         monitor=monitor,
         weekday=weekday,
@@ -191,6 +222,10 @@ def upsert_schedule(*, monitor, weekday: int, start_time, end_time, location: st
         start_time=start_time,
         end_time=end_time,
         location=location,
+        asignatura=asignatura,
+        grupo=grupo,
+        docente=docente,
+        proyecto_curricular=proyecto_curricular,
         is_active=is_active,
     )
 
@@ -203,6 +238,10 @@ def save_schedule(
     start_time,
     end_time,
     location: str,
+    asignatura: str = "",
+    grupo: str = "",
+    docente: str = "",
+    proyecto_curricular: str = "",
     is_active: bool = True,
     actor=None,
 ) -> Schedule:
@@ -213,6 +252,10 @@ def save_schedule(
     schedule.weekday = weekday
     schedule.start_time = start_time
     schedule.end_time = end_time
+    schedule.asignatura = str(asignatura or "").strip()
+    schedule.grupo = str(grupo or "").strip()
+    schedule.docente = str(docente or "").strip()
+    schedule.proyecto_curricular = _normalize_project(proyecto_curricular)
     schedule.location = location
     schedule.is_active = is_active
     schedule.full_clean()
@@ -310,6 +353,10 @@ def import_schedule_rows_from_workbook(*, uploaded_file, actor=None) -> Schedule
                     start_time=_parse_time_value(values[mapped_headers["start_time"]]),
                     end_time=_parse_time_value(values[mapped_headers["end_time"]]),
                     location=str(values[mapped_headers["location"]] or "").strip(),
+                    asignatura=str(values[mapped_headers["asignatura"]] or "").strip() if "asignatura" in mapped_headers else "",
+                    grupo=str(values[mapped_headers["grupo"]] or "").strip() if "grupo" in mapped_headers else "",
+                    docente=str(values[mapped_headers["docente"]] or "").strip() if "docente" in mapped_headers else "",
+                    proyecto_curricular=values[mapped_headers["proyecto_curricular"]] if "proyecto_curricular" in mapped_headers else "",
                     is_active=True,
                     actor=actor,
                 )

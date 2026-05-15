@@ -1,6 +1,8 @@
 from django.db.models import QuerySet, Sum
 
-from apps.common.choices import OvertimeStatusChoices, UserRoleChoices
+from django.db.models import Q
+
+from apps.common.choices import OvertimeStatusChoices, SessionStateChoices, UserRoleChoices
 from apps.work_sessions.models import WorkSession
 
 
@@ -12,7 +14,21 @@ def visible_sessions_for_user(user) -> QuerySet[WorkSession]:
 
 
 def pending_overtime_sessions_for_user(user) -> QuerySet[WorkSession]:
-    return visible_sessions_for_user(user).filter(overtime_status=OvertimeStatusChoices.PENDING)
+    return visible_sessions_for_user(user).filter(overtime_status=OvertimeStatusChoices.PENDING).exclude(
+        session_state=SessionStateChoices.INVALID
+    )
+
+
+def inconsistent_sessions_for_user(user) -> QuerySet[WorkSession]:
+    return (
+        visible_sessions_for_user(user)
+        .filter(Q(is_late=True, lateness_excused=False))
+        .exclude(session_state=SessionStateChoices.INVALID)
+    )
+
+
+def invalidated_sessions_for_user(user) -> QuerySet[WorkSession]:
+    return visible_sessions_for_user(user).filter(session_state=SessionStateChoices.INVALID)
 
 
 def monitor_minutes_summary_for_user(user):

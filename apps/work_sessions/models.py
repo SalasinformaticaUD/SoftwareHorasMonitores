@@ -66,16 +66,32 @@ class WorkSession(BaseModel):
     )
     overtime_reviewed_at = models.DateTimeField(null=True, blank=True)
     overtime_review_note = models.TextField(blank=True)
+    invalidated_by = models.ForeignKey(
+        "users.User",
+        on_delete=models.SET_NULL,
+        related_name="invalidated_work_sessions",
+        null=True,
+        blank=True,
+    )
+    invalidated_at = models.DateTimeField(null=True, blank=True)
+    invalidation_reason = models.TextField(blank=True)
 
     class Meta:
         ordering = ("-work_day", "-actual_start")
         indexes = [
             models.Index(fields=("monitor", "work_day")),
             models.Index(fields=("overtime_status", "work_day")),
+            models.Index(fields=("session_state", "work_day")),
         ]
 
     @property
+    def is_invalid(self) -> bool:
+        return self.session_state == SessionStateChoices.INVALID
+
+    @property
     def approved_overtime_minutes(self) -> int:
+        if self.is_invalid:
+            return 0
         return self.overtime_minutes if self.overtime_status == OvertimeStatusChoices.APPROVED else 0
 
     def __str__(self) -> str:

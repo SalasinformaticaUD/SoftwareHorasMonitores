@@ -10,7 +10,6 @@
 
   <section class="admin-hero">
     <div>
-      <div class="admin-kicker">REQ-02</div>
       <h1 class="admin-title">Gestion de monitores</h1>
       <p class="admin-subtitle">Administra cuentas institucionales, vinculacion de monitores, activaciones y cargas masivas desde Excel.</p>
     </div>
@@ -39,11 +38,27 @@
     <div class="col-xl-4">
       <div class="card admin-card mb-4" id="monitor-form">
         <div class="card-body">
-          <h2 class="h5 mb-1">Registrar monitor</h2>
-          <p class="text-muted small mb-3">La cuenta se crea sin contrasena y recibe un enlace para activar su acceso.</p>
+          <div class="d-flex justify-content-between gap-2 align-items-start mb-3">
+            <div>
+              <h2 class="h5 mb-1">{% if editing_monitor %}Editar monitor{% else %}Registrar monitor{% endif %}</h2>
+              <p class="text-muted small mb-0">
+                {% if editing_monitor %}
+                  Actualiza los datos academicos y la cuenta vinculada.
+                {% else %}
+                  La cuenta se crea sin contrasena y recibe un enlace para activar su acceso.
+                {% endif %}
+              </p>
+            </div>
+            {% if editing_monitor %}
+              <a class="btn btn-sm btn-outline-secondary" href="{% url 'admin-monitors' %}">Cancelar</a>
+            {% endif %}
+          </div>
           <form method="post" novalidate>
             {% csrf_token %}
-            <input type="hidden" name="action" value="create">
+            <input type="hidden" name="action" value="{% if editing_monitor %}update{% else %}create{% endif %}">
+            {% if editing_monitor %}
+              <input type="hidden" name="monitor_id" value="{{ editing_monitor.id }}">
+            {% endif %}
             {% if create_form.non_field_errors %}
               <div class="alert alert-danger py-2">{{ create_form.non_field_errors }}</div>
             {% endif %}
@@ -54,7 +69,10 @@
                 {% for error in field.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
               </div>
             {% endfor %}
-            <button class="btn btn-primary w-100 btn-icon" type="submit"><span aria-hidden="true">+</span> Crear y enviar activacion</button>
+            <button class="btn btn-primary w-100 btn-icon" type="submit">
+              <span aria-hidden="true">{% if editing_monitor %}✓{% else %}+{% endif %}</span>
+              {% if editing_monitor %}Guardar cambios{% else %}Crear y enviar activacion{% endif %}
+            </button>
           </form>
         </div>
       </div>
@@ -62,7 +80,7 @@
       <div class="card admin-card" id="monitor-upload">
         <div class="card-body">
           <h2 class="h5 mb-1">Carga masiva</h2>
-          <p class="text-muted small mb-3">Columnas esperadas: email, full_name, codigo_estudiante, department.</p>
+          <p class="text-muted small mb-3">Columnas esperadas: email, full_name, codigo_estudiante, department. Opcionales: numero_documento, proyecto_curricular, telefono.</p>
           <form method="post" enctype="multipart/form-data" novalidate>
             {% csrf_token %}
             <input type="hidden" name="action" value="upload">
@@ -155,13 +173,26 @@
               <tbody>
                 {% for row in monitors %}
                   <tr>
-                    <td><strong>{{ row.item.full_name }}</strong></td>
-                    <td>{{ row.item.codigo_estudiante }}</td>
+                    <td>
+                      <strong>{{ row.item.full_name }}</strong>
+                      {% if row.item.proyecto_curricular %}
+                        <div class="small text-muted">{{ row.item.get_proyecto_curricular_display }}</div>
+                      {% endif %}
+                    </td>
+                    <td>
+                      {{ row.item.codigo_estudiante }}
+                      {% if row.item.numero_documento %}
+                        <div class="small text-muted">Doc. {{ row.item.numero_documento }}</div>
+                      {% endif %}
+                    </td>
                     <td>{{ row.email }}</td>
                     <td>{{ row.item.get_department_display }}</td>
                     <td><span class="badge {{ row.status.badge_class }}">{{ row.status.label }}</span></td>
                     <td class="text-end">
                       <div class="d-inline-flex flex-wrap justify-content-end gap-2">
+                        <a class="btn btn-sm btn-outline-primary btn-icon" href="{% url 'admin-monitors' %}?edit={{ row.item.id }}#monitor-form">
+                          <span aria-hidden="true">✎</span> Editar
+                        </a>
                         <form method="post">
                           {% csrf_token %}
                           <input type="hidden" name="action" value="toggle">
@@ -182,29 +213,6 @@
                           <span aria-hidden="true">×</span> Eliminar
                         </button>
                       </div>
-
-                      <div class="modal fade text-start" id="delete-monitor-{{ row.item.id }}" tabindex="-1" aria-hidden="true">
-                        <div class="modal-dialog modal-dialog-centered">
-                          <div class="modal-content">
-                            <div class="modal-header">
-                              <h3 class="modal-title h5">Eliminar monitor</h3>
-                              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
-                            </div>
-                            <div class="modal-body">
-                              Esta accion eliminara a <strong>{{ row.item.full_name }}</strong> y su cuenta vinculada.
-                            </div>
-                            <div class="modal-footer">
-                              <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
-                              <form method="post">
-                                {% csrf_token %}
-                                <input type="hidden" name="action" value="delete">
-                                <input type="hidden" name="monitor_id" value="{{ row.item.id }}">
-                                <button class="btn btn-outline-danger" type="submit">Eliminar</button>
-                              </form>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
                     </td>
                   </tr>
                 {% empty %}
@@ -218,5 +226,59 @@
       </div>
     </div>
   </div>
+
+  {% for row in monitors %}
+    <div class="modal fade text-start" id="delete-monitor-{{ row.item.id }}" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h3 class="modal-title h5">Eliminar monitor</h3>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+          </div>
+          <div class="modal-body">
+            Esta accion eliminara a <strong>{{ row.item.full_name }}</strong> y su cuenta vinculada.
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+            <form method="post">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="delete">
+              <input type="hidden" name="monitor_id" value="{{ row.item.id }}">
+              <button class="btn btn-outline-danger" type="submit">Eliminar</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  {% endfor %}
+
+<style>
+.modal-backdrop {
+  z-index: 1050 !important;
+}
+.modal {
+  z-index: 1060 !important;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  // Mover TODOS los modales al body al cargar
+  document.querySelectorAll('.modal').forEach(function(modal) {
+    document.body.appendChild(modal);
+  });
+
+  // Cerrar modal después de submit
+  document.querySelectorAll('.modal form').forEach(function(form) {
+    form.addEventListener('submit', function() {
+      const modal = this.closest('.modal');
+      if (modal) {
+        const bsModal = bootstrap.Modal.getInstance(modal);
+        if (bsModal) bsModal.hide();
+      }
+    });
+  });
+});
+</script>
 </div>
 {% endblock %}

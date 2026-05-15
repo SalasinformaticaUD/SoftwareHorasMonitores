@@ -3,6 +3,7 @@ from django.db import models
 
 from apps.common.choices import DepartmentChoices
 from apps.common.models import BaseModel
+from apps.monitors.models import PROJECT_CHOICES
 
 
 class Schedule(BaseModel):
@@ -19,6 +20,10 @@ class Schedule(BaseModel):
     weekday = models.PositiveSmallIntegerField(choices=Weekday.choices)
     start_time = models.TimeField()
     end_time = models.TimeField()
+    asignatura = models.CharField(max_length=255, blank=True, default="")
+    grupo = models.CharField(max_length=64, blank=True, default="")
+    docente = models.CharField(max_length=255, blank=True, default="")
+    proyecto_curricular = models.CharField(max_length=64, choices=PROJECT_CHOICES, blank=True, default="")
     location = models.CharField(max_length=255, blank=True, default="")
     is_active = models.BooleanField(default=True)
 
@@ -32,9 +37,11 @@ class Schedule(BaseModel):
         ]
 
     def clean(self):
+        if not self.start_time or not self.end_time:
+            return
         if self.end_time <= self.start_time:
             raise ValidationError("La hora fin debe ser posterior a la hora inicio.")
-        if self.monitor_id and self.is_active:
+        if self.monitor_id and self.weekday is not None and self.is_active:
             overlapping = Schedule.objects.filter(
                 monitor_id=self.monitor_id,
                 weekday=self.weekday,

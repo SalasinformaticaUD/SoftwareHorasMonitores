@@ -24,11 +24,43 @@ class ReconciliationStatusChoices(models.TextChoices):
     PENDING = "pending", "Pendiente"
     MATCHED = "matched", "Conciliado"
     MANUAL_REVIEW = "manual_review", "Validación manual"
+    REJECTED = "rejected", "Rechazado"
+
+
+class AttendancePairingStatusChoices(models.TextChoices):
+    PENDING = "pending", "Pendiente"
+    PAIRED = "paired", "Emparejado"
+    DUPLICATE_IGNORED = "duplicate_ignored", "Duplicado ignorado"
+    UNPAIRED = "unpaired", "Sin pareja"
+
+
+class AttendanceInconsistencyTypeChoices(models.TextChoices):
+    ODD_MARK = "odd_mark", "Marcacion impar"
+    END_OF_DAY = "end_of_day", "Error de final de jornada"
+    DUPLICATE_MARK = "duplicate_mark", "Marcacion repetida"
+    OUT_OF_DAY_WINDOW = "out_of_day_window", "Fuera de jornada"
+    SHORT_PAIR = "short_pair", "Emparejamiento menor a 30 minutos"
+
+
+class AttendanceInconsistencyStatusChoices(models.TextChoices):
+    PENDING = "pending", "Pendiente"
+    VALIDATED = "validated", "Validada"
+    RESOLVED = "resolved", "Corregida"
+    DISMISSED = "dismissed", "Descartada"
+
+
+class AttendanceInconsistencyActionChoices(models.TextChoices):
+    DETECTED = "detected", "Detectada"
+    AUTO_RESOLVED = "auto_resolved", "Resuelta automaticamente"
+    ANNOTATION_LINKED = "annotation_linked", "Anotacion vinculada"
+    INVALIDATED = "invalidated", "Registro invalidado"
+    DISMISSED = "dismissed", "Descartada"
 
 
 class SessionStateChoices(models.TextChoices):
     PROCESSED = "processed", "Procesada"
     WITHOUT_SCHEDULE = "without_schedule", "Sin horario"
+    INVALID = "invalid", "Invalidada"
 
 
 class OvertimeStatusChoices(models.TextChoices):

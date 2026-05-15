@@ -11,7 +11,10 @@
         <form method="post">
           {% csrf_token %}
           {{ form.as_p }}
-          <button class="btn btn-primary" type="submit">Entrar</button>
+          <div class="d-grid gap-2">
+            <button class="btn btn-primary" type="submit">Entrar</button>
+            <a class="btn btn-outline-secondary" href="{% url 'password_reset' %}">Recuperar contrasena</a>
+          </div>
         </form>
       </div>
     </div>

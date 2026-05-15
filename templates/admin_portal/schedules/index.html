@@ -3,6 +3,108 @@
 {% block title %}Administracion de horarios{% endblock %}
 
 {% block content %}
+<style>
+  .schedule-calendar-scroll {
+    overflow-x: auto;
+    padding-bottom: 0.25rem;
+  }
+
+  .schedule-calendar-board {
+    min-width: 980px;
+    border: 1px solid rgba(118, 19, 22, 0.12);
+    border-radius: 0.5rem;
+    background: rgba(255, 253, 249, 0.96);
+    overflow: hidden;
+  }
+
+  .schedule-calendar-header,
+  .schedule-calendar-body {
+    display: grid;
+    grid-template-columns: 5rem repeat(6, minmax(8.5rem, 1fr));
+  }
+
+  .schedule-calendar-corner,
+  .schedule-calendar-day-name {
+    padding: 0.75rem 0.85rem;
+    background: #761316;
+    color: #fff;
+    font-weight: 800;
+    text-align: center;
+    border-right: 1px solid rgba(255, 255, 255, 0.18);
+  }
+
+  .schedule-calendar-body {
+    height: 38rem;
+  }
+
+  .schedule-calendar-times {
+    position: relative;
+    border-right: 1px solid rgba(118, 19, 22, 0.12);
+    background: rgba(251, 242, 237, 0.8);
+  }
+
+  .schedule-calendar-hour {
+    position: absolute;
+    left: 0;
+    right: 0;
+    transform: translateY(-50%);
+    padding-right: 0.65rem;
+    color: #726252;
+    font-size: 0.86rem;
+    text-align: right;
+  }
+
+  .schedule-calendar-lane {
+    position: relative;
+    border-right: 1px solid rgba(118, 19, 22, 0.1);
+    background:
+      repeating-linear-gradient(
+        to bottom,
+        rgba(118, 19, 22, 0.07) 0,
+        rgba(118, 19, 22, 0.07) 1px,
+        transparent 1px,
+        transparent 12.5%
+      ),
+      rgba(255, 255, 255, 0.62);
+  }
+
+  .schedule-calendar-lane:last-child {
+    border-right: 0;
+  }
+
+  .schedule-calendar-block {
+    position: absolute;
+    left: 0.55rem;
+    right: 0.55rem;
+    min-height: 2.5rem;
+    padding: 0.45rem 0.55rem;
+    border-left: 4px solid #f1c453;
+    border-radius: 0.35rem;
+    background: linear-gradient(135deg, #761316, #c93c3f);
+    color: #fff;
+    box-shadow: 0 12px 22px rgba(84, 0, 6, 0.16);
+    overflow: hidden;
+  }
+
+  .schedule-calendar-block strong,
+  .schedule-calendar-block span {
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .schedule-calendar-block span {
+    opacity: 0.88;
+    font-size: 0.85rem;
+  }
+
+  .schedule-calendar-empty {
+    padding: 1rem;
+    color: #726252;
+    font-size: 0.9rem;
+  }
+</style>
 <div class="admin-module">
   <div class="admin-crumb">
     <span>Administracion</span><span>/</span><strong>Horarios</strong>
@@ -10,7 +112,6 @@
 
   <section class="admin-hero">
     <div>
-      <div class="admin-kicker">REQ-03</div>
       <h1 class="admin-title">Gestion de horarios</h1>
       <p class="admin-subtitle">Carga, valida y consulta los horarios semanales asignados a cada monitor con control de cruces.</p>
     </div>
@@ -78,7 +179,7 @@
       <div class="card admin-card">
         <div class="card-body">
           <h2 class="h5 mb-1">Carga masiva</h2>
-          <p class="text-muted small mb-3">Columnas esperadas: email_monitor, day, start_time, end_time, location.</p>
+          <p class="text-muted small mb-3">Columnas esperadas: email_monitor, day, start_time, end_time, location. Opcionales: asignatura, grupo, docente, proyecto_curricular.</p>
           <form method="post" enctype="multipart/form-data" novalidate>
             {% csrf_token %}
             <input type="hidden" name="action" value="upload">
@@ -171,6 +272,7 @@
                   <th>Dia</th>
                   <th>Inicio</th>
                   <th>Fin</th>
+                  <th>Datos academicos</th>
                   <th>Ubicacion</th>
                   <th>Estado</th>
                   <th class="text-end">Acciones</th>
@@ -186,6 +288,16 @@
                     <td>{{ schedule.get_weekday_display }}</td>
                     <td>{{ schedule.start_time|time:"H:i" }}</td>
                     <td>{{ schedule.end_time|time:"H:i" }}</td>
+                    <td>
+                      {% if schedule.asignatura or schedule.grupo or schedule.docente or schedule.proyecto_curricular %}
+                        {% if schedule.asignatura %}<div><strong>{{ schedule.asignatura }}</strong></div>{% endif %}
+                        {% if schedule.grupo %}<div class="small text-muted">Grupo: {{ schedule.grupo }}</div>{% endif %}
+                        {% if schedule.docente %}<div class="small text-muted">Docente: {{ schedule.docente }}</div>{% endif %}
+                        {% if schedule.proyecto_curricular %}<div class="small text-muted">{{ schedule.get_proyecto_curricular_display }}</div>{% endif %}
+                      {% else %}
+                        <span class="text-muted">-</span>
+                      {% endif %}
+                    </td>
                     <td>{{ schedule.location|default:"-" }}</td>
                     <td>
                       {% if schedule.is_active %}
@@ -224,7 +336,7 @@
                     </td>
                   </tr>
                 {% empty %}
-                  <tr><td colspan="7"><div class="empty-state">No hay horarios que coincidan con los filtros.</div></td></tr>
+                  <tr><td colspan="8"><div class="empty-state">No hay horarios que coincidan con los filtros.</div></td></tr>
                 {% endfor %}
               </tbody>
             </table>
@@ -255,29 +367,39 @@
         </form>
       </div>
       {% if calendar_monitor %}
-        <div class="table-responsive">
-          <div class="weekly-calendar">
-            <div class="calendar-head">Hora</div>
-            {% for day in calendar_days %}
-              <div class="calendar-head">{{ day.label }}</div>
-            {% endfor %}
-            <div class="calendar-time">
-              {% for hour in calendar_hours %}
-                <div>{{ hour|stringformat:"02d" }}:00</div>
+        <div class="schedule-calendar-scroll">
+          <div class="schedule-calendar-board">
+            <div class="schedule-calendar-header">
+              <div class="schedule-calendar-corner">Hora</div>
+              {% for day in calendar_days %}
+                <div class="schedule-calendar-day-name">{{ day.label }}</div>
               {% endfor %}
             </div>
-            {% for day in calendar_days %}
-              <div class="calendar-day">
-                {% for block in calendar_blocks %}
-                  {% if block.day == day.value %}
-                    <div class="calendar-block" style="{{ block.style }}">
-                      <strong>{{ block.item.start_time|time:"H:i" }} - {{ block.item.end_time|time:"H:i" }}</strong>
-                      <span>{{ block.item.location|default:"Sin ubicacion" }}</span>
-                    </div>
-                  {% endif %}
-                {% endfor %}
+            <div class="schedule-calendar-body">
+              <div class="schedule-calendar-times">
+                <div class="schedule-calendar-hour" style="top: 0%;">06:00</div>
+                <div class="schedule-calendar-hour" style="top: 12.5%;">08:00</div>
+                <div class="schedule-calendar-hour" style="top: 25%;">10:00</div>
+                <div class="schedule-calendar-hour" style="top: 37.5%;">12:00</div>
+                <div class="schedule-calendar-hour" style="top: 50%;">14:00</div>
+                <div class="schedule-calendar-hour" style="top: 62.5%;">16:00</div>
+                <div class="schedule-calendar-hour" style="top: 75%;">18:00</div>
+                <div class="schedule-calendar-hour" style="top: 87.5%;">20:00</div>
+                <div class="schedule-calendar-hour" style="top: 100%;">22:00</div>
               </div>
-            {% endfor %}
+              {% for day in calendar_days %}
+                <div class="schedule-calendar-lane" aria-label="{{ day.label }}">
+                  {% for block in calendar_blocks %}
+                    {% if block.day == day.value %}
+                      <div class="schedule-calendar-block" style="{{ block.style }}">
+                        <strong>{{ block.item.start_time|time:"H:i" }} - {{ block.item.end_time|time:"H:i" }}</strong>
+                        <span>{{ block.item.location|default:"Sin ubicacion" }}{% if block.is_clipped %} · fuera de rango{% endif %}</span>
+                      </div>
+                    {% endif %}
+                  {% endfor %}
+                </div>
+              {% endfor %}
+            </div>
           </div>
         </div>
       {% else %}

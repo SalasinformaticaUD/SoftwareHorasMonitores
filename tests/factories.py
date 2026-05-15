@@ -104,8 +104,9 @@ class AttendanceRawRecordFactory(factory.django.DjangoModelFactory):
     raw_full_name = factory.SelfAttribute("monitor.full_name")
     raw_department = "Física"
     work_day = date(2026, 4, 13)
-    entry_at = timezone.make_aware(datetime(2026, 4, 13, 8, 0))
-    exit_at = timezone.make_aware(datetime(2026, 4, 13, 12, 0))
+    event_at = timezone.make_aware(datetime(2026, 4, 13, 8, 0))
+    entry_at = time(hour=8)
+    exit_at = time(hour=12)
     raw_payload = factory.LazyFunction(dict)
     monitor = factory.SubFactory(MonitorFactory)
     reconciliation_status = ReconciliationStatusChoices.MATCHED

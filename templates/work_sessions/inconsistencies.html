@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+{% load common_extras %}
+
+{% block title %}Inconsistencias{% endblock %}
+
+{% block content %}
+<div class="admin-module">
+  <div class="admin-crumb">
+    <span>Administracion</span><span>/</span><strong>Inconsistencias</strong>
+  </div>
+
+  <section class="admin-hero">
+    <div>
+      <div class="admin-kicker">Control administrativo</div>
+      <h1 class="admin-title">Gestion de inconsistencias</h1>
+      <p class="admin-subtitle">Valida registros detectados automaticamente, aprueba horas extra y corrige con anotaciones o invalidaciones sin modificar las marcaciones originales de CrossChex.</p>
+    </div>
+  </section>
+
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-lg">
+      <div class="card admin-card stat-card"><div class="card-body"><div class="stat-label">Por conciliar</div><div class="stat-value">{{ stats.raw_pending }}</div></div></div>
+    </div>
+    <div class="col-6 col-lg">
+      <div class="card admin-card stat-card"><div class="card-body"><div class="stat-label">Errores marcacion</div><div class="stat-value">{{ stats.attendance_inconsistencies }}</div></div></div>
+    </div>
+  </div>
+
+  <div class="card admin-card mb-4">
+    <div class="card-body">
+      <h2 class="h5 mb-1">Errores automaticos de marcacion</h2>
+      <p class="text-muted small mb-3">Marcaciones impares, finales de jornada, pares menores a 30 minutos y registros fuera de la ventana 05:45-22:15 pendientes de solucion por anotacion.</p>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle">
+          <thead>
+            <tr>
+              <th>Monitor</th>
+              <th>Fecha</th>
+              <th>Marcacion</th>
+              <th>Error</th>
+              <th>Gestion</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for inconsistency in attendance_inconsistencies %}
+              <tr>
+                <td>
+                  <strong>{{ inconsistency.monitor.full_name|default:inconsistency.raw_record.raw_full_name }}</strong>
+                  <div class="small text-muted">{{ inconsistency.raw_record.raw_department }}</div>
+                </td>
+                <td>{{ inconsistency.work_day }}</td>
+                <td>
+                  {% if inconsistency.raw_record.event_at %}
+                    {{ inconsistency.raw_record.event_at|date:"Y-m-d H:i" }}
+                  {% else %}
+                    <span class="text-muted">Sin fecha</span>
+                  {% endif %}
+                  <div class="small text-muted">{{ inconsistency.raw_record.get_pairing_status_display }}</div>
+                </td>
+                <td>
+                  <span class="badge text-bg-warning">{{ inconsistency.get_inconsistency_type_display }}</span>
+                  <div class="small text-muted mt-1">{{ inconsistency.message }}</div>
+                  {% if inconsistency.solution_annotation %}
+                    <div class="small text-success mt-1">Solucion vinculada: anotacion {{ inconsistency.solution_annotation.id }}</div>
+                  {% endif %}
+                </td>
+                <td>
+                  <div class="d-flex flex-column gap-2">
+                    <a
+                      class="btn btn-sm btn-outline-primary"
+                      href="{% url 'annotations-manage' %}?inconsistency={{ inconsistency.id }}&annotation_type=missing_punch"
+                    >Crear anotacion de solucion</a>
+                    <form method="post" class="d-flex gap-2 flex-wrap">
+                      {% csrf_token %}
+                      <input type="hidden" name="action" value="invalidate_inconsistent_raw">
+                      <input type="hidden" name="inconsistency_id" value="{{ inconsistency.id }}">
+                      <input class="form-control form-control-sm" name="reason" placeholder="Motivo de invalidacion">
+                      <button class="btn btn-sm btn-outline-danger" type="submit" {% if not inconsistency.solution_annotation %}disabled{% endif %}>Invalidar registro</button>
+                      {% if not inconsistency.solution_annotation %}
+                        <div class="form-text">Primero registra la anotacion de solucion.</div>
+                      {% endif %}
+                    </form>
+                  </div>
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="5"><div class="empty-state">No hay errores automaticos de marcacion pendientes.</div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card admin-card mb-4">
+    <div class="card-body">
+      <h2 class="h5 mb-1">Historial de inconsistencias</h2>
+      <p class="text-muted small mb-3">Ultimas acciones automaticas y administrativas realizadas sobre errores de marcacion.</p>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle">
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Monitor</th>
+              <th>Accion</th>
+              <th>Detalle</th>
+              <th>Usuario</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for event in recent_inconsistency_events %}
+              <tr>
+                <td>{{ event.created_at|date:"Y-m-d H:i" }}</td>
+                <td>{{ event.inconsistency.monitor.full_name|default:event.inconsistency.raw_record.raw_full_name }}</td>
+                <td>{{ event.get_action_display }}</td>
+                <td>
+                  {{ event.inconsistency.get_inconsistency_type_display }}
+                  <div class="small text-muted">{{ event.note }}</div>
+                </td>
+                <td>{{ event.actor.display_name|default:"Sistema" }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="5"><div class="empty-state">Sin historial de inconsistencias.</div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card admin-card mb-4">
+    <div class="card-body">
+      <h2 class="h5 mb-1">Registros crudos pendientes</h2>
+      <p class="text-muted small mb-3">Estos registros vienen de CrossChex y requieren conciliacion o rechazo administrativo.</p>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle">
+          <thead>
+            <tr>
+              <th>Registro</th>
+              <th>Fecha</th>
+              <th>Entrada / salida</th>
+              <th>Motivo detectado</th>
+              <th>Gestion</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for record in raw_records %}
+              <tr>
+                <td>
+                  <strong>{{ record.raw_full_name }}</strong>
+                  <div class="small text-muted">{{ record.raw_department }}</div>
+                </td>
+                <td>{{ record.work_day }}</td>
+                <td>{{ record.entry_at|time:"H:i" }} - {{ record.exit_at|time:"H:i" }}</td>
+                <td>{{ record.manual_review_reason|default:"Validacion manual" }}</td>
+                <td>
+                  <div class="d-flex flex-column gap-2">
+                    <form method="post" class="d-flex gap-2">
+                      {% csrf_token %}
+                      <input type="hidden" name="action" value="reconcile_raw">
+                      <input type="hidden" name="raw_record_id" value="{{ record.id }}">
+                      <select class="form-select form-select-sm" name="monitor_id" aria-label="Monitor">
+                        {% for monitor in monitor_options %}
+                          <option value="{{ monitor.id }}">{{ monitor.full_name }}</option>
+                        {% endfor %}
+                      </select>
+                      <button class="btn btn-sm btn-outline-primary" type="submit">Conciliar</button>
+                    </form>
+                    <form method="post" class="d-flex gap-2">
+                      {% csrf_token %}
+                      <input type="hidden" name="action" value="reject_raw">
+                      <input type="hidden" name="raw_record_id" value="{{ record.id }}">
+                      <input class="form-control form-control-sm" name="reason" placeholder="Motivo de rechazo">
+                      <button class="btn btn-sm btn-outline-danger" type="submit">Rechazar</button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="5"><div class="empty-state">No hay registros crudos pendientes.</div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

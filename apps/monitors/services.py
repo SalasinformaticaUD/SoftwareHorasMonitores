@@ -1,3 +1,10 @@
+"""Servicios de negocio para administracion de monitores.
+
+Este modulo crea, actualiza, activa/desactiva y elimina monitores junto con su
+usuario asociado. Tambien procesa cargas masivas desde Excel y envia correos de
+activacion usando el mecanismo de restablecimiento de contrasena de Django.
+"""
+
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -13,16 +20,44 @@ from openpyxl import load_workbook
 from apps.attendance.validators import validate_excel_extension
 from apps.common.choices import DepartmentChoices, UserRoleChoices
 from apps.common.utils import normalize_text
-from apps.monitors.models import Monitor
+from apps.monitors.models import Monitor, PROJECT_CHOICES
 
 
 User = get_user_model()
 
 MONITOR_UPLOAD_COLUMNS = ("email", "full_name", "codigo_estudiante", "department")
+MONITOR_OPTIONAL_UPLOAD_COLUMNS = ("numero_documento", "proyecto_curricular", "telefono")
 
 
 class MonitorActivationForm(PasswordResetForm):
+    """Formulario especializado para enviar enlaces de activacion a monitores."""
+
+    def __init__(self, *args, **kwargs):
+        self.user = None
+        super().__init__(*args, **kwargs)
+
+    def save(self, *args, **kwargs):
+        """Envia el correo de activacion evitando dependencias internas del form.
+
+        Args:
+            *args: Argumentos posicionales aceptados por ``PasswordResetForm``.
+            **kwargs: Opciones de envio como templates, dominio y token.
+
+        Returns:
+            None: Django envia el correo desde el metodo base.
+        """
+        self.user = None
+        return super().save(*args, **kwargs)
+
     def get_users(self, email):
+        """Obtiene usuarios activos por correo para el envio del token.
+
+        Args:
+            email: Correo institucional solicitado.
+
+        Yields:
+            User: Usuarios activos que coinciden con el correo.
+        """
         active_users = User._default_manager.filter(email__iexact=email, is_active=True)
         for user in active_users:
             yield user
@@ -30,6 +65,14 @@ class MonitorActivationForm(PasswordResetForm):
 
 @dataclass
 class ImportIssue:
+    """Representa una fila omitida o fallida durante una importacion.
+
+    Attributes:
+        row_number: Numero de fila en Excel.
+        email: Correo asociado a la fila.
+        reason: Motivo de omision o error.
+    """
+
     row_number: int
     email: str
     reason: str
@@ -37,6 +80,15 @@ class ImportIssue:
 
 @dataclass
 class MonitorImportResult:
+    """Resumen del procesamiento masivo de monitores.
+
+    Attributes:
+        total_rows: Filas no vacias procesadas.
+        created: Cantidad de monitores creados.
+        skipped: Filas omitidas por reglas esperadas.
+        errors: Filas que fallaron por validaciones o excepciones.
+    """
+
     total_rows: int = 0
     created: int = 0
     skipped: list[ImportIssue] = field(default_factory=list)
@@ -44,6 +96,15 @@ class MonitorImportResult:
 
 
 def send_monitor_activation_email(*, user, request=None) -> bool:
+    """Envia correo para activar cuenta/configurar contrasena de monitor.
+
+    Args:
+        user: Usuario monitor destinatario.
+        request: Peticion HTTP usada para construir dominio y protocolo.
+
+    Returns:
+        bool: ``True`` si el formulario envio el correo, ``False`` si no valido.
+    """
     form = MonitorActivationForm({"email": user.email})
     if not form.is_valid():
         return False
@@ -67,14 +128,40 @@ def create_monitor_with_user(
     codigo_estudiante: str,
     email: str,
     department: str,
+    numero_documento: str = "",
+    proyecto_curricular: str = "",
+    telefono: str = "",
     request=None,
     actor=None,
 ) -> Monitor:
+    """Crea un monitor y su usuario local vinculado.
+
+    Args:
+        full_name: Nombre completo del monitor.
+        codigo_estudiante: Codigo estudiantil unico.
+        email: Correo institucional usado como username.
+        department: Dependencia a la que pertenece.
+        numero_documento: Documento de identidad del monitor.
+        proyecto_curricular: Proyecto curricular al que pertenece.
+        telefono: Numero telefonico de contacto.
+        request: Peticion HTTP para enviar enlace de activacion.
+        actor: Usuario que ejecuta la accion; limita alcance de lideres.
+
+    Returns:
+        Monitor: Monitor creado y vinculado al usuario.
+
+    Raises:
+        ValidationError: Si un lider intenta crear fuera de su dependencia o si
+        las validaciones de modelo fallan.
+    """
     if actor and actor.role != UserRoleChoices.ADMIN and department != actor.department:
         raise ValidationError("Solo puedes crear monitores de tu propia dependencia.")
     email = email.strip().lower()
     full_name = full_name.strip()
     codigo_estudiante = str(codigo_estudiante).strip()
+    numero_documento = str(numero_documento or "").strip()
+    proyecto_curricular = str(proyecto_curricular or "").strip()
+    telefono = str(telefono or "").strip()
     with transaction.atomic():
         user = User(
             username=email,
@@ -95,6 +182,9 @@ def create_monitor_with_user(
             user=user,
             full_name=full_name,
             codigo_estudiante=codigo_estudiante,
+            numero_documento=numero_documento,
+            proyecto_curricular=proyecto_curricular,
+            telefono=telefono,
             department=department,
             is_active=True,
         )
@@ -104,13 +194,116 @@ def create_monitor_with_user(
     return monitor
 
 
+def update_monitor_with_user(
+    *,
+    monitor: Monitor,
+    full_name: str,
+    codigo_estudiante: str,
+    email: str,
+    department: str,
+    numero_documento: str = "",
+    proyecto_curricular: str = "",
+    telefono: str = "",
+    request=None,
+    actor=None,
+) -> Monitor:
+    """Actualiza un monitor y sincroniza su usuario vinculado.
+
+    Args:
+        monitor: Monitor existente que se va a modificar.
+        full_name: Nuevo nombre completo.
+        codigo_estudiante: Nuevo codigo estudiantil.
+        email: Nuevo correo/username.
+        department: Dependencia destino.
+        numero_documento: Documento de identidad actualizado.
+        proyecto_curricular: Proyecto curricular actualizado.
+        telefono: Telefono actualizado.
+        request: Peticion HTTP para activar si se crea usuario nuevo.
+        actor: Usuario que ejecuta la accion.
+
+    Returns:
+        Monitor: Monitor actualizado.
+
+    Raises:
+        ValidationError: Si el lider edita o mueve monitores fuera de su alcance.
+    """
+    if actor and actor.role != UserRoleChoices.ADMIN and monitor.department != actor.department:
+        raise ValidationError("Solo puedes editar monitores de tu propia dependencia.")
+    if actor and actor.role != UserRoleChoices.ADMIN and department != actor.department:
+        raise ValidationError("Solo puedes mover monitores dentro de tu propia dependencia.")
+
+    email = email.strip().lower()
+    full_name = full_name.strip()
+    codigo_estudiante = str(codigo_estudiante).strip()
+    numero_documento = str(numero_documento or "").strip()
+    proyecto_curricular = str(proyecto_curricular or "").strip()
+    telefono = str(telefono or "").strip()
+
+    with transaction.atomic():
+        user = monitor.user
+        user_created = False
+        if user is None:
+            user = User(
+                role=UserRoleChoices.MONITOR,
+                is_staff=False,
+                is_superuser=False,
+                is_active=True,
+            )
+            user.set_unusable_password()
+            user_created = True
+
+        user.username = email
+        user.email = email
+        user.first_name = full_name.split(" ", 1)[0]
+        user.last_name = full_name.split(" ", 1)[1] if " " in full_name else ""
+        user.department = department
+        user.role = UserRoleChoices.MONITOR
+        user.full_clean()
+        user.save()
+
+        monitor.user = user
+        monitor.full_name = full_name
+        monitor.codigo_estudiante = codigo_estudiante
+        monitor.numero_documento = numero_documento
+        monitor.proyecto_curricular = proyecto_curricular
+        monitor.telefono = telefono
+        monitor.department = department
+        monitor.full_clean()
+        monitor.save()
+
+    if user_created:
+        send_monitor_activation_email(user=user, request=request)
+    return monitor
+
+
 def resend_monitor_activation(*, monitor: Monitor, request=None) -> bool:
+    """Reenvia el correo de activacion de una cuenta de monitor.
+
+    Args:
+        monitor: Monitor que debe tener usuario vinculado.
+        request: Peticion HTTP para construir URL absoluta.
+
+    Returns:
+        bool: Resultado del envio de correo.
+
+    Raises:
+        ValidationError: Si el monitor no tiene usuario asociado.
+    """
     if not monitor.user:
         raise ValidationError("Este monitor no tiene una cuenta vinculada.")
     return send_monitor_activation_email(user=monitor.user, request=request)
 
 
 def set_monitor_account_active(*, monitor: Monitor, is_active: bool) -> Monitor:
+    """Activa o desactiva el monitor y su usuario vinculado.
+
+    Args:
+        monitor: Monitor a modificar.
+        is_active: Estado activo deseado.
+
+    Returns:
+        Monitor: Monitor actualizado.
+    """
     monitor.is_active = is_active
     update_fields = ["is_active", "updated_at"]
     if monitor.user:
@@ -121,6 +314,14 @@ def set_monitor_account_active(*, monitor: Monitor, is_active: bool) -> Monitor:
 
 
 def delete_monitor_account(*, monitor: Monitor) -> None:
+    """Elimina un monitor y, si existe, su usuario vinculado.
+
+    Args:
+        monitor: Monitor a eliminar.
+
+    Returns:
+        None: La operacion borra registros dentro de una transaccion.
+    """
     user = monitor.user
     with transaction.atomic():
         monitor.delete()
@@ -129,6 +330,11 @@ def delete_monitor_account(*, monitor: Monitor) -> None:
 
 
 def _department_lookup() -> dict[str, str]:
+    """Construye equivalencias normalizadas para dependencias.
+
+    Returns:
+        dict[str, str]: Mapa de alias/etiquetas normalizadas a valor interno.
+    """
     mapping: dict[str, str] = {}
     for value, label in DepartmentChoices.choices:
         mapping[value] = value
@@ -138,6 +344,17 @@ def _department_lookup() -> dict[str, str]:
 
 
 def _normalize_department(value: Any) -> str:
+    """Normaliza una dependencia proveniente de formulario o Excel.
+
+    Args:
+        value: Valor libre de dependencia.
+
+    Returns:
+        str: Valor interno de ``DepartmentChoices``.
+
+    Raises:
+        ValidationError: Si la dependencia no se reconoce.
+    """
     raw_value = str(value or "").strip()
     department = _department_lookup().get(raw_value) or _department_lookup().get(normalize_text(raw_value))
     if not department:
@@ -145,11 +362,68 @@ def _normalize_department(value: Any) -> str:
     return department
 
 
+def _project_lookup() -> dict[str, str]:
+    """Construye equivalencias normalizadas para proyectos curriculares.
+
+    Returns:
+        dict[str, str]: Mapa de valor/etiqueta normalizada a valor interno.
+    """
+    mapping: dict[str, str] = {"": ""}
+    for value, label in PROJECT_CHOICES:
+        mapping[value] = value
+        mapping[normalize_text(value)] = value
+        mapping[normalize_text(label)] = value
+    return mapping
+
+
+def _normalize_project(value: Any) -> str:
+    """Normaliza un proyecto curricular recibido desde formulario o Excel.
+
+    Args:
+        value: Valor libre, etiqueta o clave del proyecto.
+
+    Returns:
+        str: Valor interno de ``PROJECT_CHOICES`` o cadena vacia.
+
+    Raises:
+        ValidationError: Si el proyecto no pertenece al catalogo permitido.
+    """
+    raw_value = str(value or "").strip()
+    if not raw_value:
+        return ""
+    project = _project_lookup().get(raw_value) or _project_lookup().get(normalize_text(raw_value))
+    if not project:
+        raise ValidationError("Proyecto curricular no reconocido.")
+    return project
+
+
 def _header_map(headers) -> dict[str, int]:
+    """Mapea encabezados de Excel normalizados a indices de columna.
+
+    Args:
+        headers: Iterable de encabezados originales.
+
+    Returns:
+        dict[str, int]: Nombre normalizado -> indice de columna.
+    """
     return {normalize_text(str(header or "").strip()): index for index, header in enumerate(headers)}
 
 
 def import_monitors_from_workbook(*, uploaded_file, request=None, actor=None) -> MonitorImportResult:
+    """Importa monitores desde un archivo Excel.
+
+    Args:
+        uploaded_file: Archivo ``.xlsx`` con columnas requeridas.
+        request: Peticion HTTP para enviar correos de activacion.
+        actor: Usuario que ejecuta la carga; limita dependencias para lideres.
+
+    Returns:
+        MonitorImportResult: Resumen de filas creadas, omitidas y fallidas.
+
+    Raises:
+        ValidationError: Si el archivo no es Excel, esta vacio o no contiene las
+        columnas obligatorias.
+    """
     validate_excel_extension(uploaded_file.name)
     workbook = load_workbook(uploaded_file, read_only=True, data_only=True)
     worksheet = workbook.active
@@ -175,6 +449,17 @@ def import_monitors_from_workbook(*, uploaded_file, request=None, actor=None) ->
             full_name = str(row_values[mapped_headers["full_name"]] or "").strip()
             codigo = str(row_values[mapped_headers["codigo_estudiante"]] or "").strip()
             department = _normalize_department(row_values[mapped_headers["department"]])
+            numero_documento = (
+                str(row_values[mapped_headers["numero_documento"]] or "").strip()
+                if "numero_documento" in mapped_headers
+                else ""
+            )
+            proyecto_curricular = _normalize_project(row_values[mapped_headers["proyecto_curricular"]]) if "proyecto_curricular" in mapped_headers else ""
+            telefono = (
+                str(row_values[mapped_headers["telefono"]] or "").strip()
+                if "telefono" in mapped_headers
+                else ""
+            )
             if actor and actor.role != UserRoleChoices.ADMIN and department != actor.department:
                 result.skipped.append(
                     ImportIssue(row_number=row_number, email=email or "-", reason="Pertenece a otra dependencia.")
@@ -193,6 +478,9 @@ def import_monitors_from_workbook(*, uploaded_file, request=None, actor=None) ->
                 codigo_estudiante=codigo,
                 email=email,
                 department=department,
+                numero_documento=numero_documento,
+                proyecto_curricular=proyecto_curricular,
+                telefono=telefono,
                 request=request,
                 actor=actor,
             )

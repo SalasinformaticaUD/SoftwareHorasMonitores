@@ -2,7 +2,7 @@ from django import forms
 
 from apps.attendance.validators import validate_excel_extension
 from apps.common.choices import DepartmentChoices, UserRoleChoices
-from apps.monitors.models import Monitor
+from apps.monitors.models import Monitor, PROJECT_CHOICES
 from apps.schedules.models import Schedule, ScheduleException
 
 
@@ -33,7 +33,18 @@ class ScheduleForm(forms.ModelForm):
 
     class Meta:
         model = Schedule
-        fields = ("monitor", "weekday", "start_time", "end_time", "location", "is_active")
+        fields = (
+            "monitor",
+            "weekday",
+            "start_time",
+            "end_time",
+            "asignatura",
+            "grupo",
+            "docente",
+            "proyecto_curricular",
+            "location",
+            "is_active",
+        )
         widgets = {
             "start_time": forms.TimeInput(format="%H:%M", attrs={"type": "time"}),
             "end_time": forms.TimeInput(format="%H:%M", attrs={"type": "time"}),
@@ -43,6 +54,10 @@ class ScheduleForm(forms.ModelForm):
             "weekday": "Dia",
             "start_time": "Hora inicio",
             "end_time": "Hora fin",
+            "asignatura": "Asignatura",
+            "grupo": "Grupo",
+            "docente": "Docente",
+            "proyecto_curricular": "Proyecto curricular",
             "location": "Ubicacion",
             "is_active": "Activo",
         }
@@ -52,6 +67,7 @@ class ScheduleForm(forms.ModelForm):
         self.fields["start_time"].input_formats = ["%H:%M", "%H:%M:%S"]
         self.fields["end_time"].input_formats = ["%H:%M", "%H:%M:%S"]
         self.fields["monitor"].queryset = monitors or Monitor.objects.filter(is_active=True).order_by("full_name")
+        self.fields["proyecto_curricular"].choices = (("", "Seleccione un proyecto curricular"), *PROJECT_CHOICES)
         for field in self.fields.values():
             if isinstance(field.widget, forms.CheckboxInput):
                 field.widget.attrs["class"] = "form-check-input"

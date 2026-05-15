@@ -120,7 +120,19 @@
 
   <div class="card shadow-sm mt-4">
     <div class="card-body">
-      <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-2 mb-3">
+      <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-REQ-02 gap-2 mb-3">
+        <div>
+          <h3 class="h5 mb-1">Linea de tiempo multinivel</h3>
+          <p class="text-muted mb-0">Comparacion visual entre horario programado, marcaciones y estado de validacion.</p>
+        </div>
+      </div>
+      {% include "includes/session_timeline.html" with timeline_rows=result.timeline_rows %}
+    </div>
+  </div>
+
+  <div class="card shadow-sm mt-4">
+    <div class="card-body">
+      <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-REQ-02 gap-2 mb-3">
         <div class="monitor-record-intro">
             <h3 class="h5 mb-1">Historial reciente</h3>
             <p class="text-muted mb-0"><span id="monitor-record-visible-count">{{ result.recent_sessions|length }}</span> sesiones visibles.</p>
@@ -153,11 +165,11 @@
             {% for session in result.recent_sessions %}
               <tr class="monitor-record-row">
                 <td><strong>{{ session.work_day }}</strong></td>
-                <td class="text-center">{{ session.actual_start|time:"H:i:s" }}</td>
-                <td class="text-center">{{ session.actual_end|time:"H:i:s" }}</td>
-                <td class="text-center">{{ session.normal_minutes|minutes_to_hours }}</td>
-                <td class="text-center">{{ session.overtime_minutes|minutes_to_hours }}</td>
-                <td class="text-center">
+                <td>{{ session.actual_start|time:"H:i:s" }}</td>
+                <td>{{ session.actual_end|time:"H:i:s" }}</td>
+                <td>{{ session.normal_minutes|minutes_to_hours }}</td>
+                <td>{{ session.overtime_minutes|minutes_to_hours }}</td>
+                <td>
                   {{ session.late_minutes|minutes_to_hours }}
                   {% if session.lateness_excused %}
                     <div><span class="badge text-bg-info mt-1">Exento</span></div>

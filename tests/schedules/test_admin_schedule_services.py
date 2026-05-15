@@ -35,8 +35,18 @@ def test_save_schedule_rejects_overlapping_blocks_for_same_monitor_day():
         weekday=Schedule.Weekday.MONDAY,
         start_time=time(8),
         end_time=time(10),
+        asignatura="Fisica I",
+        grupo="A1",
+        docente="Docente Uno",
+        proyecto_curricular="ingenieria_electronica",
         location="Lab 1",
     )
+
+    schedule = Schedule.objects.get(monitor=monitor)
+    assert schedule.asignatura == "Fisica I"
+    assert schedule.grupo == "A1"
+    assert schedule.docente == "Docente Uno"
+    assert schedule.proyecto_curricular == "ingenieria_electronica"
 
     with pytest.raises(ValidationError):
         save_schedule(
@@ -60,9 +70,9 @@ def test_import_schedule_rows_matches_monitor_by_email_and_reports_missing_monit
     monitor = MonitorFactory(user=user, department=DepartmentChoices.PHYSICS)
     workbook = build_schedule_rows_workbook(
         [
-            ["email_monitor", "day", "start_time", "end_time", "location"],
-            [user.email, "lunes", "08:00", "10:00", "Lab A"],
-            ["missing@example.edu", "martes", "10:00", "12:00", "Lab B"],
+            ["email_monitor", "day", "start_time", "end_time", "location", "asignatura", "grupo", "docente", "proyecto_curricular"],
+            [user.email, "lunes", "08:00", "10:00", "Lab A", "Circuitos", "G2", "Docente Dos", "Ingenieria electrica"],
+            ["missing@example.edu", "martes", "10:00", "12:00", "Lab B", "", "", "", ""],
         ]
     )
 
@@ -71,4 +81,8 @@ def test_import_schedule_rows_matches_monitor_by_email_and_reports_missing_monit
     assert result.total_rows == 2
     assert result.created == 1
     assert len(result.skipped) == 1
-    assert Schedule.objects.filter(monitor=monitor, location="Lab A").exists()
+    schedule = Schedule.objects.get(monitor=monitor, location="Lab A")
+    assert schedule.asignatura == "Circuitos"
+    assert schedule.grupo == "G2"
+    assert schedule.docente == "Docente Dos"
+    assert schedule.proyecto_curricular == "ingenieria_electrica"

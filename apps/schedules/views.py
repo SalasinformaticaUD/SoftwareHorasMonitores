@@ -48,6 +48,9 @@ class ScheduleAdminView(AdminOrLeaderRequiredMixin, TemplateView):
                 | Q(monitor__codigo_estudiante__icontains=search)
                 | Q(monitor__user__email__icontains=search)
                 | Q(location__icontains=search)
+                | Q(asignatura__icontains=search)
+                | Q(grupo__icontains=search)
+                | Q(docente__icontains=search)
             )
         if monitor_id:
             queryset = queryset.filter(monitor_id=monitor_id)
@@ -92,13 +95,18 @@ class ScheduleAdminView(AdminOrLeaderRequiredMixin, TemplateView):
         for schedule in schedules:
             start = schedule.start_time.hour * 60 + schedule.start_time.minute
             end = schedule.end_time.hour * 60 + schedule.end_time.minute
-            top = max((start - day_start_minutes) / total_minutes * 100, 0)
-            height = max((end - start) / total_minutes * 100, 5)
+            visible_start = max(start, day_start_minutes)
+            visible_end = min(end, day_end_minutes)
+            if visible_end <= day_start_minutes or visible_start >= day_end_minutes:
+                continue
+            top = (visible_start - day_start_minutes) / total_minutes * 100
+            height = max((visible_end - visible_start) / total_minutes * 100, 5)
             blocks.append(
                 {
                     "item": schedule,
                     "day": schedule.weekday,
                     "style": f"top: {top:.2f}%; height: {height:.2f}%;",
+                    "is_clipped": start < day_start_minutes or end > day_end_minutes,
                 }
             )
         return {

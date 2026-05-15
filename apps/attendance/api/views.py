@@ -49,9 +49,6 @@ class PendingReconciliationViewSet(viewsets.ReadOnlyModelViewSet):
         monitor = visible_monitors_for_user(request.user).get(pk=serializer.validated_data["monitor_id"])
         try:
             assign_monitor_manually(raw_record=raw_record, monitor=monitor, actor=request.user)
-            from apps.work_sessions.services import process_raw_record_to_session
-
-            process_raw_record_to_session(raw_record=raw_record)
         except DjangoValidationError as exc:
             raise exceptions.ValidationError(exc.messages)
         return response.Response(

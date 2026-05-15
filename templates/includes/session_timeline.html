@@ -1,0 +1,351 @@
+{% load common_extras %}
+<style>
+  .session-timeline-shell {
+    max-height: 46rem;
+    overflow: auto;
+    overscroll-behavior: contain;
+    padding-right: 0.25rem;
+  }
+
+  .session-timeline-shell::-webkit-scrollbar {
+    width: 0.65rem;
+    height: 0.65rem;
+  }
+
+  .session-timeline-shell::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: rgba(118, 19, 22, 0.34);
+  }
+
+  .session-timeline-shell::-webkit-scrollbar-track {
+    background: rgba(251, 242, 237, 0.72);
+  }
+
+  .attendance-timeline-card {
+    min-width: 1020px;
+    padding: 1.5rem;
+    border: 1px solid rgba(118, 19, 22, 0.12);
+    border-radius: 0.65rem;
+    background: rgba(255, 253, 249, 0.98);
+  }
+
+  .attendance-timeline-card + .attendance-timeline-card {
+    margin-top: 1rem;
+  }
+
+  .attendance-timeline-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 1.75rem;
+  }
+
+  .attendance-timeline-title {
+    margin: 0;
+    color: #111111;
+    font-size: 1.05rem;
+    font-weight: 800;
+  }
+
+  .attendance-timeline-subtitle {
+    margin: 0.45rem 0 0;
+    color: #5f6270;
+    font-size: 0.85rem;
+  }
+
+  .attendance-timeline-meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    color: #34303b;
+    font-size: 0.88rem;
+    white-space: nowrap;
+  }
+
+  .attendance-timeline-calendar-icon {
+    position: relative;
+    width: 0.9rem;
+    height: 0.9rem;
+    border: 2px solid #6b7280;
+    border-radius: 0.18rem;
+  }
+
+  .attendance-timeline-calendar-icon::before {
+    content: "";
+    position: absolute;
+    right: -2px;
+    left: -2px;
+    top: 0.18rem;
+    border-top: 2px solid #6b7280;
+  }
+
+  .attendance-timeline-total {
+    display: inline-flex;
+    align-items: center;
+    margin-top: 0.8rem;
+    padding: 0.35rem 0.6rem;
+    border: 1px solid rgba(33, 37, 41, 0.16);
+    border-radius: 0.35rem;
+    color: #101010;
+    background: #ffffff;
+    font-size: 0.78rem;
+    font-weight: 800;
+  }
+
+  .attendance-timeline-board {
+    position: relative;
+    padding-top: 0.35rem;
+    background-image: repeating-linear-gradient(
+      to right,
+      transparent 0,
+      transparent calc(6.25% - 1px),
+      rgba(71, 85, 105, 0.18) calc(6.25% - 1px),
+      rgba(71, 85, 105, 0.18) 6.25%
+    );
+  }
+
+  .attendance-timeline-level {
+    position: relative;
+    margin-bottom: 1.45rem;
+  }
+
+  .attendance-timeline-level-label {
+    margin-bottom: 0.4rem;
+    color: #47526a;
+    font-size: 0.74rem;
+    font-weight: 800;
+  }
+
+  .attendance-timeline-lane {
+    position: relative;
+    height: 2.45rem;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    border-radius: 0.4rem;
+    background: rgba(248, 250, 252, 0.82);
+    overflow: hidden;
+  }
+
+  .attendance-timeline-lane.is-fingerprint {
+    height: 3.55rem;
+    display: flex;
+    align-items: center;
+    overflow: visible;
+  }
+
+  .attendance-timeline-lane.is-fingerprint::before {
+    content: "";
+    position: absolute;
+    right: 0;
+    left: 0;
+    top: 50%;
+    height: 0.18rem;
+    border-radius: 999px;
+    background: #c7cdd5;
+    transform: translateY(-50%);
+  }
+
+  .timeline-segment {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    min-width: 1.6rem;
+    color: transparent;
+    overflow: hidden;
+  }
+
+  .timeline-segment.schedule {
+    border-right: 2px solid #f4b400;
+    border-left: 2px solid #f4b400;
+    background: rgba(255, 224, 102, 0.34);
+  }
+
+  .timeline-segment.normal { background: #35d06d; }
+  .timeline-segment.overtime-pending { background: #ffd233; }
+  .timeline-segment.overtime-approved { background: #4f8df7; }
+  .timeline-segment.overtime-rejected { background: #fb982e; }
+  .timeline-segment.overtime-neutral { background: #8b716f; }
+  .timeline-segment.inconsistency { background: #ff5666; }
+  .timeline-segment.validated { background: #00a85a; }
+
+  .attendance-timeline-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.85rem;
+    align-items: center;
+    margin-bottom: 0.55rem;
+  }
+
+  .timeline-key {
+    display: inline-flex;
+    gap: 0.35rem;
+    align-items: center;
+    color: #4e5a70;
+    font-size: 0.72rem;
+    white-space: nowrap;
+  }
+
+  .timeline-key::before {
+    content: "";
+    width: 0.95rem;
+    height: 0.95rem;
+    border-radius: 999px;
+    background: var(--timeline-color);
+  }
+
+  .timeline-key.normal { --timeline-color: #35d06d; }
+  .timeline-key.pending { --timeline-color: #ffd233; }
+  .timeline-key.approved { --timeline-color: #4f8df7; }
+  .timeline-key.rejected { --timeline-color: #fb982e; }
+  .timeline-key.inconsistency { --timeline-color: #ff5666; }
+
+  .timeline-marker {
+    position: absolute;
+    top: 50%;
+    width: 0.92rem;
+    height: 0.92rem;
+    border: 2px solid rgba(17, 24, 39, 0.12);
+    border-radius: 999px;
+    box-shadow: 0 0.1rem 0.25rem rgba(15, 23, 42, 0.2);
+    transform: translate(-50%, -50%);
+    z-index: 2;
+  }
+
+  .timeline-marker.entry { background: #00a85a; }
+  .timeline-marker.exit { background: #1d5fd1; }
+
+  .attendance-timeline-scale {
+    margin-top: 0.25rem;
+  }
+
+  .attendance-timeline-scale-label {
+    margin-bottom: 0.55rem;
+    color: #47526a;
+    font-size: 0.74rem;
+  }
+
+  .attendance-timeline-hours {
+    position: relative;
+    height: 2.1rem;
+    border-bottom: 0.7rem solid rgba(229, 231, 235, 0.7);
+  }
+
+  .attendance-timeline-hour {
+    position: absolute;
+    bottom: 0.65rem;
+    color: #03132c;
+    font-size: 0.75rem;
+    font-weight: 700;
+    transform: translateX(-50%);
+  }
+
+  .attendance-timeline-hour::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 1.25rem;
+    width: 1px;
+    height: 0.75rem;
+    background: #8792a2;
+  }
+
+  .timeline-empty-card {
+    padding: 1rem;
+    border: 1px dashed rgba(118, 19, 22, 0.22);
+    border-radius: 0.5rem;
+    color: #6c757d;
+    background: rgba(255, 253, 249, 0.86);
+    text-align: center;
+  }
+
+  @media (max-width: 991.98px) {
+    .session-timeline-shell {
+      max-height: 38rem;
+      overflow: auto;
+    }
+
+    .attendance-timeline-card {
+      min-width: 920px;
+      padding: 1rem;
+    }
+  }
+</style>
+
+<div class="session-timeline-shell">
+  {% for row in timeline_rows %}
+    <article class="attendance-timeline-card">
+      <div class="attendance-timeline-header">
+        <div>
+          <h3 class="attendance-timeline-title">{{ row.session.monitor.full_name }}</h3>
+          <p class="attendance-timeline-subtitle">
+            Horario asignado:
+            {% if row.session.schedule %}
+              {{ row.session.schedule.start_time|time:"H:i" }} - {{ row.session.schedule.end_time|time:"H:i" }}
+            {% else %}
+              Sin horario asignado
+            {% endif %}
+          </p>
+        </div>
+        <div class="text-end">
+          <div class="attendance-timeline-meta">
+            <span class="attendance-timeline-calendar-icon" aria-hidden="true"></span>
+            <span>{{ row.session.work_day|date:"l, d \\d\\e F \\d\\e Y"|title }}</span>
+          </div>
+          <div class="attendance-timeline-total">{{ row.worked_minutes|minutes_to_hours }}h trabajadas</div>
+        </div>
+      </div>
+
+      <div class="attendance-timeline-board">
+        {% for track in row.tracks %}
+          <section class="attendance-timeline-level">
+            <div class="attendance-timeline-level-label">{{ track.label }}</div>
+            {% if forloop.counter == 2 %}
+              <div class="attendance-timeline-legend">
+                <span class="timeline-key normal">Horas Normales</span>
+                <span class="timeline-key pending">Extra Pendiente</span>
+                <span class="timeline-key approved">Extra Aprobada</span>
+                <span class="timeline-key rejected">Extra Rechazada</span>
+                <span class="timeline-key inconsistency">Error</span>
+              </div>
+            {% endif %}
+            <div class="attendance-timeline-lane {% if forloop.counter == 3 %}is-fingerprint{% endif %}">
+              {% for segment in track.segments %}
+                <div class="timeline-segment {{ segment.kind }}" style="{{ segment.style }}" title="{{ segment.label }} - {{ segment.detail }}"></div>
+              {% endfor %}
+              {% if forloop.counter == 3 %}
+                {% for marker in row.markers %}
+                  <span class="timeline-marker {{ marker.kind }}" style="{{ marker.style }}" title="{{ marker.label }} {{ marker.time|time:'H:i' }}"></span>
+                {% endfor %}
+              {% endif %}
+            </div>
+          </section>
+        {% endfor %}
+
+        <div class="attendance-timeline-scale">
+          <div class="attendance-timeline-scale-label">Escala de tiempo (6:00 AM - 10:00 PM):</div>
+          <div class="attendance-timeline-hours">
+            <span class="attendance-timeline-hour" style="left: 0%;">6:00</span>
+            <span class="attendance-timeline-hour" style="left: 6.25%;">7:00</span>
+            <span class="attendance-timeline-hour" style="left: 12.5%;">8:00</span>
+            <span class="attendance-timeline-hour" style="left: 18.75%;">9:00</span>
+            <span class="attendance-timeline-hour" style="left: 25%;">10:00</span>
+            <span class="attendance-timeline-hour" style="left: 31.25%;">11:00</span>
+            <span class="attendance-timeline-hour" style="left: 37.5%;">12:00</span>
+            <span class="attendance-timeline-hour" style="left: 43.75%;">13:00</span>
+            <span class="attendance-timeline-hour" style="left: 50%;">14:00</span>
+            <span class="attendance-timeline-hour" style="left: 56.25%;">15:00</span>
+            <span class="attendance-timeline-hour" style="left: 62.5%;">16:00</span>
+            <span class="attendance-timeline-hour" style="left: 68.75%;">17:00</span>
+            <span class="attendance-timeline-hour" style="left: 75%;">18:00</span>
+            <span class="attendance-timeline-hour" style="left: 81.25%;">19:00</span>
+            <span class="attendance-timeline-hour" style="left: 87.5%;">20:00</span>
+            <span class="attendance-timeline-hour" style="left: 93.75%;">21:00</span>
+            <span class="attendance-timeline-hour" style="left: 100%;">22:00</span>
+          </div>
+        </div>
+      </div>
+    </article>
+  {% empty %}
+    <div class="timeline-empty-card">No hay sesiones suficientes para construir la linea de tiempo.</div>
+  {% endfor %}
+</div>

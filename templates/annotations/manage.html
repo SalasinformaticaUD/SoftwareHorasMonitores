@@ -64,9 +64,18 @@
             <a class="btn btn-outline-secondary btn-sm" href="{% url 'annotations-manage' %}">Cancelar</a>
           {% endif %}
         </div>
+        {% if source_inconsistency %}
+          <div class="alert alert-warning py-2">
+            Solucion para {{ source_inconsistency.monitor.full_name|default:source_inconsistency.raw_record.raw_full_name }}
+            del {{ source_inconsistency.work_day }}. Completa las horas y el motivo.
+          </div>
+        {% endif %}
         <form method="post" novalidate>
           {% csrf_token %}
           <input type="hidden" name="action" value="save">
+          {% if source_inconsistency %}
+            <input type="hidden" name="inconsistency_id" value="{{ source_inconsistency.id }}">
+          {% endif %}
           {% if editing_annotation %}
             <input type="hidden" name="annotation_id" value="{{ editing_annotation.id }}">
           {% endif %}

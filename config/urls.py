@@ -1,7 +1,13 @@
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
-from django.contrib.auth.views import LogoutView, PasswordResetCompleteView, PasswordResetConfirmView
+from django.contrib.auth.views import (
+    LogoutView,
+    PasswordResetCompleteView,
+    PasswordResetConfirmView,
+    PasswordResetDoneView,
+    PasswordResetView,
+)
 from django.shortcuts import redirect
 from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
@@ -9,18 +15,24 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from apps.common.web import health_check
 from apps.attendance.views import AttendanceImportView, ReconciliationQueueView
 from apps.reports.views import (
+    CommitmentActAdminView,
     DepartmentDashboardExportView,
+    GeneratedCommitmentActAdminDownloadView,
     LeaderDashboardView,
+    MonitorCommitmentActPdfView,
     MonitorRecordsDetailView,
     PublicMonitorLookupView,
     MonitorSelfHoursView,
+    SignedCommitmentActsBulkDownloadView,
+    SignedCommitmentActAdminDownloadView,
 )
 from apps.users.views import RoleAwareLoginView
 from apps.schedules.views import ScheduleExceptionListView
 from apps.monitors.views import MonitorAdminView
 from apps.schedules.views import ScheduleAdminView
-from apps.work_sessions.views import OvertimeReviewListView
+from apps.work_sessions.views import InconsistencyManagementView, OvertimeReviewListView
 from apps.annotations.views import AnnotationManagementView
+from apps.users.forms import RecoveryPasswordResetForm
 
 
 def root_redirect(_request):
@@ -38,9 +50,41 @@ urlpatterns = [
     path("healthz/", health_check, name="healthz"),
     path("admin/monitors/", MonitorAdminView.as_view(), name="admin-monitors"),
     path("admin/schedules/", ScheduleAdminView.as_view(), name="admin-schedules"),
+    path("admin/actas-compromiso/", CommitmentActAdminView.as_view(), name="admin-commitment-acts"),
+    path(
+        "admin/actas-compromiso/firmadas.zip",
+        SignedCommitmentActsBulkDownloadView.as_view(),
+        name="admin-commitment-acts-bulk-signed",
+    ),
+    path(
+        "admin/actas-compromiso/<uuid:monitor_id>/generada.pdf",
+        GeneratedCommitmentActAdminDownloadView.as_view(),
+        name="admin-commitment-act-generated",
+    ),
+    path(
+        "admin/actas-compromiso/<uuid:monitor_id>/firmada.pdf",
+        SignedCommitmentActAdminDownloadView.as_view(),
+        name="admin-commitment-act-signed",
+    ),
     path("admin/", admin.site.urls),
     path("login/", RoleAwareLoginView.as_view(), name="login"),
     path("logout/", LogoutView.as_view(next_page="public-monitor-lookup"), name="logout"),
+    path(
+        "accounts/reset/",
+        PasswordResetView.as_view(
+            form_class=RecoveryPasswordResetForm,
+            template_name="registration/password_reset_form.html",
+            email_template_name="registration/password_reset_recovery_email.html",
+            subject_template_name="registration/password_reset_recovery_subject.txt",
+            success_url="/accounts/reset/done/",
+        ),
+        name="password_reset",
+    ),
+    path(
+        "accounts/reset/done/",
+        PasswordResetDoneView.as_view(template_name="registration/password_reset_done.html"),
+        name="password_reset_done",
+    ),
     path(
         "accounts/reset/<uidb64>/<token>/",
         PasswordResetConfirmView.as_view(
@@ -70,8 +114,10 @@ urlpatterns = [
     path("anotaciones/", AnnotationManagementView.as_view(), name="annotations-manage"),
     path("excepciones/", ScheduleExceptionListView.as_view(), name="schedule-exceptions"),
     path("overtime/review/", OvertimeReviewListView.as_view(), name="overtime-review"),
+    path("inconsistencias/", InconsistencyManagementView.as_view(), name="inconsistencies-manage"),
     path("consulta/", PublicMonitorLookupView.as_view(), name="public-monitor-lookup"),
     path("mis-horas/", MonitorSelfHoursView.as_view(), name="monitor-hours"),
+    path("mis-horas/acta-compromiso.pdf", MonitorCommitmentActPdfView.as_view(), name="monitor-commitment-act-pdf"),
     path("api/schema/", SpectacularAPIView.as_view(), name="api-schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="api-schema"), name="api-docs"),
     path("api/v1/auth/", include("apps.users.api.urls")),

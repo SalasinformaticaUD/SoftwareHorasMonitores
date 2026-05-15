@@ -1,3 +1,10 @@
+"""Servicios de negocio para convertir marcaciones en sesiones trabajadas.
+
+Este modulo contiene las reglas centrales de calculo de horas: normalizacion de
+entrada/salida, asignacion de horario, calculo de horas normales, horas extra,
+retardos, excepciones, revision administrativa e invalidacion de sesiones.
+"""
+
 from __future__ import annotations
 
 from django.core.exceptions import ValidationError
@@ -21,6 +28,18 @@ from apps.work_sessions.models import WorkSession
 
 
 def _resolve_lateness(*, monitor, work_day, schedule, normalized_start):
+    """Calcula retardo y excepcion aplicable para una sesion.
+
+    Args:
+        monitor: Monitor dueño de la sesion.
+        work_day: Fecha de trabajo.
+        schedule: Horario asignado, si existe.
+        normalized_start: Hora de entrada normalizada.
+
+    Returns:
+        tuple[int, bool, ScheduleException | None]: Minutos de retardo, bandera
+        de exencion y excepcion que justifico la exencion.
+    """
     late = 0
     lateness_excused = False
     lateness_exception = lateness_exception_for(monitor=monitor, day=work_day)
@@ -35,6 +54,17 @@ def _resolve_lateness(*, monitor, work_day, schedule, normalized_start):
 
 
 def _resolve_overtime_exception(*, monitor, work_day, overtime_minutes):
+    """Determina el estado inicial de horas extra segun excepciones activas.
+
+    Args:
+        monitor: Monitor dueño de la sesion.
+        work_day: Fecha de trabajo.
+        overtime_minutes: Minutos extra calculados.
+
+    Returns:
+        tuple[str, bool, ScheduleException | None]: Estado de horas extra,
+        bandera de aprobacion automatica y excepcion aplicada.
+    """
     if overtime_minutes <= 0:
         return OvertimeStatusChoices.NOT_APPLICABLE, False, None
 
@@ -47,6 +77,14 @@ def _resolve_overtime_exception(*, monitor, work_day, overtime_minutes):
 
 @transaction.atomic
 def sync_session_lateness(*, session: WorkSession) -> WorkSession:
+    """Recalcula el retardo de una sesion existente.
+
+    Args:
+        session: Sesion que sera sincronizada con excepciones vigentes.
+
+    Returns:
+        WorkSession: Sesion actualizada y persistida.
+    """
     normalized_start = session.normalized_start or session.actual_start
     late, lateness_excused, lateness_exception = _resolve_lateness(
         monitor=session.monitor,
@@ -72,6 +110,14 @@ def sync_session_lateness(*, session: WorkSession) -> WorkSession:
 
 @transaction.atomic
 def sync_session_overtime_exception(*, session: WorkSession) -> WorkSession:
+    """Recalcula aprobacion automatica de horas extra para una sesion.
+
+    Args:
+        session: Sesion con minutos extra ya calculados.
+
+    Returns:
+        WorkSession: Sesion actualizada con estado/exception de horas extra.
+    """
     overtime_status, overtime_auto_approved, overtime_exception = _resolve_overtime_exception(
         monitor=session.monitor,
         work_day=session.work_day,
@@ -118,6 +164,17 @@ def sync_sessions_for_exception_change(
     previous_end_date=None,
     previous_department=None,
 ) -> int:
+    """Sincroniza sesiones afectadas por cambios en excepciones de horario.
+
+    Args:
+        current_exception: Excepcion actual creada o modificada.
+        previous_start_date: Fecha inicial anterior cuando hubo edicion.
+        previous_end_date: Fecha final anterior cuando hubo edicion.
+        previous_department: Dependencia anterior cuando hubo edicion.
+
+    Returns:
+        int: Cantidad de sesiones recalculadas.
+    """
     start_candidates = [
         value
         for value in [
@@ -165,6 +222,17 @@ def sync_sessions_for_exception_change(
 
 @transaction.atomic
 def process_raw_record_to_session(*, raw_record):
+    """Convierte un registro crudo conciliado en una sesion de trabajo.
+
+    Args:
+        raw_record: Registro de asistencia conciliado con monitor.
+
+    Returns:
+        WorkSession: Sesion existente o recien creada.
+
+    Raises:
+        ValidationError: Si el registro no es procesable.
+    """
     try:
         return raw_record.work_session
     except WorkSession.DoesNotExist:
@@ -272,10 +340,28 @@ def review_overtime(
     note: str = "",
     penalize_on_reject: bool = True,
 ) -> WorkSession:
+    """Aprueba o rechaza horas extra pendientes de una sesion.
+
+    Args:
+        session: Sesion con horas extra pendientes.
+        reviewer: Usuario administrador o lider que decide.
+        decision: ``approve`` para aprobar o ``reject`` para rechazar.
+        note: Anotacion administrativa requerida al rechazar.
+        penalize_on_reject: Indica si el rechazo crea anotacion de descuento.
+
+    Returns:
+        WorkSession: Sesion actualizada con decision y auditoria.
+
+    Raises:
+        ValidationError: Si el usuario no tiene permisos, la sesion no esta
+        pendiente o la decision es invalida.
+    """
     if reviewer.role not in {UserRoleChoices.ADMIN, UserRoleChoices.LEADER}:
         raise ValidationError("Solo administradores o líderes pueden revisar horas extra.")
     if not department_allowed(reviewer, session.monitor.department):
         raise ValidationError("No puedes revisar sesiones de otra dependencia.")
+    if session.session_state == SessionStateChoices.INVALID:
+        raise ValidationError("No puedes revisar horas extra de una sesion invalidada.")
     if session.overtime_status != OvertimeStatusChoices.PENDING:
         raise ValidationError("La sesión no tiene horas extra pendientes.")
 
@@ -334,5 +420,56 @@ def review_overtime(
                 "decision": decision,
             },
         )
+    )
+    return session
+
+
+@transaction.atomic
+def invalidate_work_session(*, session: WorkSession, actor, reason: str) -> WorkSession:
+    """Invalida una sesion sin modificar la marcacion original de CrossChex.
+
+    Args:
+        session: Sesion derivada que dejara de contabilizarse.
+        actor: Usuario administrador o lider que invalida.
+        reason: Motivo obligatorio de invalidacion.
+
+    Returns:
+        WorkSession: Sesion marcada como invalidada con datos de auditoria.
+
+    Raises:
+        ValidationError: Si el usuario no tiene permisos, falta motivo o la
+        sesion ya estaba invalidada.
+    """
+    if actor.role not in {UserRoleChoices.ADMIN, UserRoleChoices.LEADER}:
+        raise ValidationError("Solo administradores o lideres pueden invalidar registros.")
+    if not department_allowed(actor, session.monitor.department):
+        raise ValidationError("No puedes invalidar registros de otra dependencia.")
+    reason = (reason or "").strip()
+    if not reason:
+        raise ValidationError("Invalidar un registro requiere un motivo.")
+    if session.session_state == SessionStateChoices.INVALID:
+        raise ValidationError("La sesion ya esta invalidada.")
+
+    session.session_state = SessionStateChoices.INVALID
+    session.invalidated_by = actor
+    session.invalidated_at = timezone.now()
+    session.invalidation_reason = reason
+    if session.overtime_status == OvertimeStatusChoices.PENDING:
+        session.overtime_status = OvertimeStatusChoices.REJECTED
+        session.overtime_reviewed_by = actor
+        session.overtime_reviewed_at = session.invalidated_at
+        session.overtime_review_note = f"Registro invalidado: {reason}"
+    session.save(
+        update_fields=[
+            "session_state",
+            "invalidated_by",
+            "invalidated_at",
+            "invalidation_reason",
+            "overtime_status",
+            "overtime_reviewed_by",
+            "overtime_reviewed_at",
+            "overtime_review_note",
+            "updated_at",
+        ]
     )
     return session

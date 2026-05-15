@@ -16,6 +16,7 @@ from apps.monitors.services import (
     import_monitors_from_workbook,
     resend_monitor_activation,
     set_monitor_account_active,
+    update_monitor_with_user,
 )
 
 
@@ -66,8 +67,20 @@ class MonitorAdminView(AdminOrLeaderRequiredMixin, TemplateView):
             return {"label": "Activa", "badge_class": "text-bg-primary"}
         return {"label": "Pendiente", "badge_class": "text-bg-warning"}
 
+    def _selected_monitor(self):
+        monitor_id = self.request.GET.get("edit") or self.request.POST.get("monitor_id")
+        if not monitor_id:
+            return None
+        return get_object_or_404(
+            visible_monitors_for_user(self.request.user).select_related("user"),
+            pk=monitor_id,
+        )
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        editing_monitor = kwargs.get("editing_monitor")
+        if editing_monitor is None:
+            editing_monitor = self._selected_monitor()
         queryset = self._base_queryset()
         pagination = paginate_collection(self.request, queryset, per_page=self.paginate_by)
         monitors = [
@@ -80,7 +93,9 @@ class MonitorAdminView(AdminOrLeaderRequiredMixin, TemplateView):
         ]
         context.update(
             {
-                "create_form": kwargs.get("create_form") or MonitorRegistrationForm(actor=self.request.user),
+                "create_form": kwargs.get("create_form")
+                or MonitorRegistrationForm(actor=self.request.user, instance=editing_monitor),
+                "editing_monitor": editing_monitor,
                 "upload_form": kwargs.get("upload_form") or MonitorBulkUploadForm(),
                 "upload_result": kwargs.get("upload_result"),
                 "monitors": monitors,
@@ -112,6 +127,18 @@ class MonitorAdminView(AdminOrLeaderRequiredMixin, TemplateView):
                 messages.success(request, "Monitor creado. Se envio el correo de activacion.")
                 return redirect("admin-monitors")
             return self.render_to_response(self.get_context_data(create_form=form))
+
+        if action == "update":
+            monitor = self._selected_monitor()
+            form = MonitorRegistrationForm(request.POST, actor=request.user, instance=monitor)
+            if form.is_valid():
+                try:
+                    update_monitor_with_user(monitor=monitor, **form.cleaned_data, request=request, actor=request.user)
+                    messages.success(request, "Monitor actualizado correctamente.")
+                    return redirect("admin-monitors")
+                except ValidationError as exc:
+                    form.add_error(None, "; ".join(exc.messages))
+            return self.render_to_response(self.get_context_data(create_form=form, editing_monitor=monitor))
 
         if action == "upload":
             form = MonitorBulkUploadForm(request.POST, request.FILES)

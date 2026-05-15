@@ -25,9 +25,27 @@ class MonitorDepartmentFilter(admin.SimpleListFilter):
 @admin.register(Schedule)
 class ScheduleAdmin(admin.ModelAdmin):
     change_list_template = "admin/schedules/schedule/change_list.html"
-    list_display = ("monitor", "weekday", "start_time", "end_time", "location", "is_active")
-    list_filter = ("weekday", "is_active", MonitorDepartmentFilter)
-    search_fields = ("monitor__full_name", "monitor__codigo_estudiante")
+    list_display = (
+        "monitor",
+        "weekday",
+        "start_time",
+        "end_time",
+        "asignatura",
+        "grupo",
+        "docente",
+        "proyecto_curricular",
+        "location",
+        "is_active",
+    )
+    list_filter = ("weekday", "is_active", "proyecto_curricular", MonitorDepartmentFilter)
+    search_fields = (
+        "monitor__full_name",
+        "monitor__codigo_estudiante",
+        "asignatura",
+        "grupo",
+        "docente",
+        "location",
+    )
 
     def get_urls(self):
         urls = super().get_urls()

@@ -12,7 +12,7 @@ if (BASE_DIR / ".env").exists():
 
 SECRET_KEY = env("SECRET_KEY", default="unsafe-secret-key")
 DEBUG = env("DEBUG")
-ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost", "127.0.0.1","10.20.150.11"])
+ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost", "127.0.0.1","10.20.150.11","192.168.56.1"])
 CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
 APP_ENV = env("APP_ENV", default="local")
 LOG_LEVEL = env("LOG_LEVEL", default="INFO")
@@ -140,7 +140,7 @@ SPECTACULAR_SETTINGS = {
 
 IMPORT_DROPZONE_PATH = env(
     "IMPORT_DROPZONE_PATH",
-    default=str(BASE_DIR / "dropzone" / "croschex.xlsx"),
+    default=str(BASE_DIR / "dropzone" / "marcaciones.xlsx"),
 )
 
 # Email configuration

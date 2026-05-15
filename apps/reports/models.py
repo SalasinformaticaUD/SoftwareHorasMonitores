@@ -36,3 +36,36 @@ class MonitorReportSnapshot(BaseModel):
     def __str__(self) -> str:
         return f"{self.monitor.full_name}: {self.start_date} - {self.end_date}"
 
+
+class MonitorMemorandum(BaseModel):
+    """Memorando generado automaticamente por retardos acumulados.
+
+    Attributes:
+        monitor: Monitor al que pertenece el memorando.
+        late_count_threshold: Cantidad de retardos que disparo el memorando.
+        sent_to: Correo institucional usado para el envio.
+        pdf_file: Copia del PDF generado.
+        sent_at: Fecha de envio del correo.
+    """
+
+    monitor = models.ForeignKey("monitors.Monitor", on_delete=models.CASCADE, related_name="memorandums")
+    late_count_threshold = models.PositiveIntegerField()
+    sent_to = models.EmailField()
+    pdf_file = models.FileField(upload_to="memorandos/%Y/%m/%d", blank=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ("-late_count_threshold", "-created_at")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("monitor", "late_count_threshold"),
+                name="reports_unique_monitor_memorandum_threshold",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=("monitor", "late_count_threshold")),
+        ]
+
+    def __str__(self) -> str:
+        return f"Memorando {self.late_count_threshold} retardos - {self.monitor}"
+

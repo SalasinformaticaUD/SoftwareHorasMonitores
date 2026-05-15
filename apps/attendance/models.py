@@ -200,6 +200,13 @@ class AttendanceInconsistency(BaseModel):
     def __str__(self) -> str:
         return f"{self.get_inconsistency_type_display()} - {self.raw_record}"
 
+    @property
+    def can_resolve_without_annotation(self) -> bool:
+        return self.inconsistency_type in {
+            AttendanceInconsistencyTypeChoices.ODD_MARK,
+            AttendanceInconsistencyTypeChoices.END_OF_DAY,
+        }
+
 
 class AttendanceInconsistencyEvent(BaseModel):
     inconsistency = models.ForeignKey(

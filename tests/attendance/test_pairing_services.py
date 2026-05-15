@@ -10,6 +10,10 @@ from apps.attendance.services import (
     link_annotation_to_inconsistency,
     pair_raw_attendance_events,
 )
+from apps.attendance.selectors import (
+    pending_inconsistencies_for_user,
+    visible_inconsistencies_for_user,
+)
 from apps.common.choices import (
     AnnotationActionChoices,
     AnnotationTypeChoices,
@@ -64,6 +68,28 @@ def test_pair_raw_attendance_events_ignores_marks_inside_five_minute_window():
     assert duplicate.processed_at is not None
     assert exit_record.pairing_status == AttendancePairingStatusChoices.PAIRED
     assert exit_record.paired_record == entry
+
+
+@pytest.mark.django_db
+def test_resolved_duplicate_marks_do_not_appear_in_pending_inconsistencies():
+    import_job = AttendanceImportJobFactory()
+    monitor = MonitorFactory(full_name="Ana Torres")
+    user = UserFactory(department=monitor.department)
+    raw_event(import_job=import_job, monitor=monitor, event_at=datetime(2026, 4, 13, 8, 0), row_number=2)
+    duplicate = raw_event(import_job=import_job, monitor=monitor, event_at=datetime(2026, 4, 13, 8, 3), row_number=3)
+    raw_event(import_job=import_job, monitor=monitor, event_at=datetime(2026, 4, 13, 12, 0), row_number=4)
+
+    pair_raw_attendance_events(work_day=date(2026, 4, 13), monitor=monitor)
+    assert not pending_inconsistencies_for_user(user).filter(
+        raw_record=duplicate,
+        inconsistency_type=AttendanceInconsistencyTypeChoices.DUPLICATE_MARK,
+        status=AttendanceInconsistencyStatusChoices.RESOLVED,
+    ).exists()
+    assert visible_inconsistencies_for_user(user).filter(
+        raw_record=duplicate,
+        inconsistency_type=AttendanceInconsistencyTypeChoices.DUPLICATE_MARK,
+        status=AttendanceInconsistencyStatusChoices.RESOLVED,
+    ).exists()
 
 
 @pytest.mark.django_db
@@ -151,7 +177,7 @@ def test_pair_raw_attendance_events_detects_short_pair_without_processing_it():
 
 
 @pytest.mark.django_db
-def test_inconsistent_raw_record_requires_solution_annotation_before_invalidation():
+def test_unpaired_inconsistent_raw_record_can_be_invalidated_without_annotation():
     leader = UserFactory()
     import_job = AttendanceImportJobFactory(uploaded_by=leader)
     monitor = MonitorFactory(full_name="Ana Torres", department=leader.department)
@@ -160,6 +186,28 @@ def test_inconsistent_raw_record_requires_solution_annotation_before_invalidatio
     inconsistency = AttendanceInconsistency.objects.get(
         raw_record=unpaired,
         inconsistency_type=AttendanceInconsistencyTypeChoices.END_OF_DAY,
+    )
+
+    invalidate_inconsistent_raw_record(inconsistency=inconsistency, actor=leader, reason="Se resuelve sin ajuste de horas.")
+
+    unpaired.refresh_from_db()
+    inconsistency.refresh_from_db()
+    assert unpaired.reconciliation_status == ReconciliationStatusChoices.REJECTED
+    assert inconsistency.status == AttendanceInconsistencyStatusChoices.RESOLVED
+    assert inconsistency.solution_annotation is None
+
+
+@pytest.mark.django_db
+def test_short_pair_requires_solution_annotation_before_invalidation():
+    leader = UserFactory()
+    import_job = AttendanceImportJobFactory(uploaded_by=leader)
+    monitor = MonitorFactory(full_name="Ana Torres", department=leader.department)
+    entry = raw_event(import_job=import_job, monitor=monitor, event_at=datetime(2026, 4, 13, 8, 0), row_number=2)
+    raw_event(import_job=import_job, monitor=monitor, event_at=datetime(2026, 4, 13, 8, 20), row_number=3)
+    pair_raw_attendance_events(work_day=date(2026, 4, 13), monitor=monitor)
+    inconsistency = AttendanceInconsistency.objects.get(
+        raw_record=entry,
+        inconsistency_type=AttendanceInconsistencyTypeChoices.SHORT_PAIR,
     )
 
     with pytest.raises(ValidationError):
@@ -176,7 +224,7 @@ def test_inconsistent_raw_record_requires_solution_annotation_before_invalidatio
     link_annotation_to_inconsistency(inconsistency=inconsistency, annotation=annotation, actor=leader)
     invalidate_inconsistent_raw_record(inconsistency=inconsistency, actor=leader, reason="Correccion aplicada.")
 
-    unpaired.refresh_from_db()
+    entry.refresh_from_db()
     inconsistency.refresh_from_db()
-    assert unpaired.reconciliation_status == ReconciliationStatusChoices.REJECTED
+    assert entry.reconciliation_status == ReconciliationStatusChoices.REJECTED
     assert inconsistency.status == AttendanceInconsistencyStatusChoices.RESOLVED

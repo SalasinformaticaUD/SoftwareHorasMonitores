@@ -43,7 +43,7 @@ def paginate_collection(request, items, *, per_page: int = 20, page_param: str =
 
 
 def enforce_public_lookup_limit(request, limit: int | None = None, window_seconds: int | None = None) -> None:
-    limit = limit if limit is not None else getattr(settings, "PUBLIC_LOOKUP_LIMIT", 10)
+    limit = limit if limit is not None else getattr(settings, "PUBLIC_LOOKUP_LIMIT", 100)
     window_seconds = (
         window_seconds
         if window_seconds is not None

@@ -419,6 +419,7 @@ def aggregate_monitor_metrics(*, monitor, start_date: Optional[date] = None, end
         "total_minutes": total_minutes,
         "net_total_minutes": net_total_minutes,
         "remaining_minutes": remaining_minutes,
+        "memorandums_count": monitor.memorandums.count(),
         "has_memorandum": session_totals["late_count"] >= MEMORANDUM_THRESHOLD,
     }
 

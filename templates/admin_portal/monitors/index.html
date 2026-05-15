@@ -120,11 +120,11 @@
       <div class="card admin-card mb-4">
         <div class="card-body">
           <form method="get" class="row g-3 align-items-end">
-            <div class="col-md-5">
+            <div class="col-md-4">
               <label class="form-label" for="monitor-search">Buscar</label>
               <input class="form-control" id="monitor-search" type="search" name="q" value="{{ request.GET.q }}" placeholder="Nombre, correo o codigo">
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
               <label class="form-label" for="monitor-status">Estado</label>
               <select class="form-select" id="monitor-status" name="status">
                 <option value="">Todos</option>
@@ -134,6 +134,14 @@
               </select>
             </div>
             <div class="col-md-3">
+              <label class="form-label" for="monitor-alerts">Alertas</label>
+              <select class="form-select" id="monitor-alerts" name="alerts">
+                <option value="">Todas</option>
+                <option value="late" {% if request.GET.alerts == "late" %}selected{% endif %}>Con llegadas tarde</option>
+                <option value="memorandums" {% if request.GET.alerts == "memorandums" %}selected{% endif %}>Con memorandos</option>
+              </select>
+            </div>
+            <div class="col-md-2">
               <label class="form-label" for="monitor-sort">Orden</label>
               <select class="form-select" id="monitor-sort" name="sort">
                 <option value="name" {% if request.GET.sort == "name" or not request.GET.sort %}selected{% endif %}>Nombre</option>
@@ -166,6 +174,7 @@
                   <th>Codigo</th>
                   <th>Correo</th>
                   <th>Dependencia</th>
+                  <th>Alertas</th>
                   <th>Estado</th>
                   <th class="text-end">Acciones</th>
                 </tr>
@@ -187,6 +196,23 @@
                     </td>
                     <td>{{ row.email }}</td>
                     <td>{{ row.item.get_department_display }}</td>
+                    <td>
+                      <span class="badge text-bg-warning">{{ row.late_count }} retardos</span>
+                      <div class="small text-muted">{{ row.memorandum_count }} memorandos</div>
+                      {% if row.memorandums %}
+                        <div class="d-flex flex-wrap gap-1 mt-2">
+                          {% for memorandum in row.memorandums %}
+                            <a
+                              class="btn btn-sm btn-outline-primary"
+                              href="{% url 'admin-monitor-memorandum-pdf' row.item.id memorandum.id %}"
+                              target="_blank"
+                            >
+                              PDF {{ memorandum.late_count_threshold }}
+                            </a>
+                          {% endfor %}
+                        </div>
+                      {% endif %}
+                    </td>
                     <td><span class="badge {{ row.status.badge_class }}">{{ row.status.label }}</span></td>
                     <td class="text-end">
                       <div class="d-inline-flex flex-wrap justify-content-end gap-2">
@@ -216,7 +242,7 @@
                     </td>
                   </tr>
                 {% empty %}
-                  <tr><td colspan="6"><div class="empty-state">No hay monitores que coincidan con los filtros.</div></td></tr>
+                  <tr><td colspan="7"><div class="empty-state">No hay monitores que coincidan con los filtros.</div></td></tr>
                 {% endfor %}
               </tbody>
             </table>

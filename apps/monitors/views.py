@@ -1,8 +1,10 @@
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
 from django.core.exceptions import ValidationError
-from django.db.models import Q
+from django.db.models import Count, Q
+from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect
+from django.views import View
 from django.views.generic import TemplateView
 
 from apps.common.choices import UserRoleChoices
@@ -18,6 +20,7 @@ from apps.monitors.services import (
     set_monitor_account_active,
     update_monitor_with_user,
 )
+from apps.reports.models import MonitorMemorandum
 
 
 class MonitorAdminView(AdminOrLeaderRequiredMixin, TemplateView):
@@ -32,10 +35,24 @@ class MonitorAdminView(AdminOrLeaderRequiredMixin, TemplateView):
     }
 
     def _base_queryset(self):
-        queryset = visible_monitors_for_user(self.request.user).select_related("user").order_by("full_name")
+        queryset = (
+            visible_monitors_for_user(self.request.user)
+            .select_related("user")
+            .prefetch_related("memorandums")
+            .annotate(
+                late_arrivals_count=Count(
+                    "work_sessions",
+                    filter=Q(work_sessions__is_late=True) & ~Q(work_sessions__session_state="invalid"),
+                    distinct=True,
+                ),
+                memorandums_count=Count("memorandums", distinct=True),
+            )
+            .order_by("full_name")
+        )
         search = self.request.GET.get("q", "").strip()
         department = self.request.GET.get("department", "").strip()
         status = self.request.GET.get("status", "").strip()
+        alerts = self.request.GET.get("alerts", "").strip()
         sort = self.request.GET.get("sort", "name")
         direction = self.request.GET.get("direction", "asc")
 
@@ -53,6 +70,10 @@ class MonitorAdminView(AdminOrLeaderRequiredMixin, TemplateView):
             queryset = queryset.filter(is_active=True, user__is_active=True, user__password__startswith="!")
         elif status == "inactive":
             queryset = queryset.filter(Q(is_active=False) | Q(user__is_active=False))
+        if alerts == "memorandums":
+            queryset = queryset.filter(memorandums_count__gt=0)
+        elif alerts == "late":
+            queryset = queryset.filter(late_arrivals_count__gt=0)
 
         sort_field = self.sort_fields.get(sort, "full_name")
         if direction == "desc":
@@ -88,6 +109,9 @@ class MonitorAdminView(AdminOrLeaderRequiredMixin, TemplateView):
                 "item": monitor,
                 "email": monitor.user.email if monitor.user else "-",
                 "status": self._account_status(monitor),
+                "late_count": getattr(monitor, "late_arrivals_count", 0),
+                "memorandum_count": getattr(monitor, "memorandums_count", 0),
+                "memorandums": list(monitor.memorandums.all()),
             }
             for monitor in pagination["page_obj"].object_list
         ]
@@ -178,3 +202,44 @@ class MonitorAdminView(AdminOrLeaderRequiredMixin, TemplateView):
             delete_monitor_account(monitor=monitor)
             messages.success(request, "Monitor eliminado correctamente.")
         return redirect("admin-monitors")
+
+
+class MonitorMemorandumDownloadView(AdminOrLeaderRequiredMixin, View):
+    """Descarga un PDF de memorando de un monitor visible para el usuario.
+
+    Funciones:
+        - Validar alcance de admin/lider sobre el monitor.
+        - Entregar el PDF asociado al memorando sin permitir acceso cruzado.
+    """
+
+    def get(self, request, *args, **kwargs):
+        """Retorna el PDF del memorando solicitado.
+
+        Args:
+            request: Peticion HTTP autenticada.
+            *args: Argumentos posicionales de Django.
+            **kwargs: Incluye ``monitor_id`` y ``memorandum_id`` desde la URL.
+
+        Returns:
+            FileResponse: Archivo PDF del memorando.
+
+        Raises:
+            Http404: Si el monitor, memorando o archivo no existe en el alcance.
+        """
+
+        monitor = get_object_or_404(
+            visible_monitors_for_user(request.user),
+            pk=kwargs["monitor_id"],
+        )
+        memorandum = get_object_or_404(
+            MonitorMemorandum.objects.filter(monitor=monitor),
+            pk=kwargs["memorandum_id"],
+        )
+        if not memorandum.pdf_file:
+            raise Http404("El memorando no tiene PDF asociado.")
+        try:
+            handle = memorandum.pdf_file.open("rb")
+        except FileNotFoundError as exc:
+            raise Http404("El archivo del memorando no existe.") from exc
+        filename = memorandum.pdf_file.name.rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
+        return FileResponse(handle, as_attachment=False, filename=filename, content_type="application/pdf")

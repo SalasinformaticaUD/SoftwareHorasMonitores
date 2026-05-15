@@ -2,20 +2,49 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from html import escape
 from pathlib import Path
 import re
+import os
+from io import BytesIO
+from xml.sax.saxutils import escape
+from reportlab.lib.utils import ImageReader
+from pathlib import Path
+from django.utils import timezone
+ 
+from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY, TA_LEFT
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.units import cm, mm
+from reportlab.platypus import (
+    HRFlowable,
+    Image,
+    Paragraph,
+    SimpleDocTemplate,
+    Spacer,
+    Table,
+    TableStyle,
+)
 
 from django.conf import settings
+from django.core.files.base import ContentFile
+from django.core.mail import EmailMessage
 from django.db import transaction
 from django.utils import timezone
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill
+from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from apps.common.choices import DepartmentChoices
 from apps.common.events import DomainEvent, event_bus
 from apps.common.utils import normalize_text
 from apps.reports.events import REPORT_GENERATED
-from apps.reports.models import MonitorReportSnapshot
+from apps.reports.models import MonitorMemorandum, MonitorReportSnapshot
 from apps.reports.selectors import aggregate_monitor_metrics, build_monitor_rows_for_user
 
 
@@ -60,6 +89,7 @@ DEPARTMENT_EXPORT_FILENAMES = {
     DepartmentChoices.ELECTRICAL: "dashboard_monitores_laboratorios.xlsx",
 }
 SIGNED_COMMITMENT_ACTS_FOLDER = "actas_compromiso_firmadas"
+MEMORANDUM_LATE_THRESHOLD = 3
 
 
 @dataclass(frozen=True)
@@ -172,6 +202,372 @@ def build_commitment_act_status_rows(monitors) -> list[CommitmentActStatus]:
     """
 
     return [commitment_act_status_for_monitor(monitor) for monitor in monitors]
+
+ 
+LOGO_PATH = r"C:\Users\ud\Documents\MonitoresV1.1.0\SoftwareHorasMonitores\static\branding\logo-ud.png"
+MEMORANDUM_LATE_THRESHOLD = 3
+ 
+ 
+def _load_logo() -> ImageReader | None:
+    """Carga el logo como ImageReader en memoria usando Pillow.
+    Compone sobre fondo blanco para evitar el fondo negro en ReportLab."""
+    if not os.path.exists(LOGO_PATH):
+        return None
+    try:
+        from PIL import Image as PILImage
+        img = PILImage.open(LOGO_PATH)
+        # Convertir a RGBA primero si es modo P (paleta)
+        if img.mode == "P":
+            img = img.convert("RGBA")
+        # Componer sobre fondo blanco para eliminar transparencia
+        if img.mode in ("RGBA", "LA"):
+            background = PILImage.new("RGB", img.size, (255, 255, 255))
+            background.paste(img, mask=img.split()[-1])
+            img = background
+        else:
+            img = img.convert("RGB")
+        buf = BytesIO()
+        img.save(buf, format="PNG")
+        buf.seek(0)
+        return ImageReader(buf)
+    except Exception:
+        return None
+ 
+ 
+def generate_lateness_memorandum_pdf(*, monitor, late_count: int) -> bytes:
+    """Genera el PDF de memorando por llegadas tarde con el diseño oficial
+    de la Universidad Distrital Francisco José de Caldas."""
+    from apps.work_sessions.models import WorkSession
+ 
+    buffer = BytesIO()
+ 
+    LEFT   = 1.8 * cm
+    RIGHT  = 1.8 * cm
+    TOP    = 3.8 * cm
+    BOTTOM = 2.5 * cm
+ 
+    document = SimpleDocTemplate(
+        buffer,
+        pagesize=letter,
+        title="Memorando",
+        leftMargin=LEFT,
+        rightMargin=RIGHT,
+        topMargin=TOP,
+        bottomMargin=BOTTOM,
+    )
+ 
+    page_width = letter[0] - LEFT - RIGHT
+ 
+    # ── Estilos ──────────────────────────────────────────────────────────────
+    styles = getSampleStyleSheet()
+ 
+    normal = ParagraphStyle(
+        "MemoNormal",
+        parent=styles["Normal"],
+        fontName="Helvetica",
+        fontSize=10,
+        leading=14,
+        spaceAfter=2,
+    )
+    bold_label = ParagraphStyle(
+        "MemoBoldLabel",
+        parent=normal,
+        fontName="Helvetica-Bold",
+    )
+    justified = ParagraphStyle(
+        "MemoJustified",
+        parent=normal,
+        alignment=TA_JUSTIFY,
+    )
+    centered_title = ParagraphStyle(
+        "MemoTitle",
+        parent=styles["Normal"],
+        fontName="Helvetica-Bold",
+        fontSize=11,
+        leading=14,
+        alignment=TA_CENTER,
+        spaceAfter=6,
+    )
+    th = ParagraphStyle(
+        "MemoTH",
+        parent=styles["Normal"],
+        fontName="Helvetica-Bold",
+        fontSize=8,
+        leading=10,
+        alignment=TA_CENTER,
+    )
+    td = ParagraphStyle(
+        "MemoTD",
+        parent=styles["Normal"],
+        fontName="Helvetica",
+        fontSize=8,
+        leading=10,
+        alignment=TA_LEFT,
+    )
+    td_center = ParagraphStyle(
+        "MemoTDCenter",
+        parent=td,
+        alignment=TA_CENTER,
+    )
+ 
+    # ── Datos ────────────────────────────────────────────────────────────────
+    memorandum_number = late_count // MEMORANDUM_LATE_THRESHOLD
+    current_date = timezone.localdate()
+ 
+    sessions = list(
+        WorkSession.objects.select_related("schedule")
+        .filter(monitor=monitor, is_late=True)
+        .exclude(session_state="invalid")
+        .order_by("-work_day", "-actual_start")[:late_count]
+    )
+    sessions.reverse()
+ 
+    def _session_subject(session) -> str:
+        schedule = session.schedule
+        if schedule and schedule.asignatura:
+            return schedule.asignatura
+        if schedule and schedule.location:
+            return schedule.location
+        return monitor.get_department_display()
+ 
+    def _session_hour(session) -> str:
+        schedule = session.schedule
+        start = schedule.start_time if schedule else session.actual_start
+        end   = schedule.end_time   if schedule else session.actual_end
+        return f"{start.strftime('%H:%M')} - {end.strftime('%H:%M')}"
+ 
+    # ── Tabla de retardos ────────────────────────────────────────────────────
+    col_widths = [
+        page_width * 0.38,
+        page_width * 0.15,
+        page_width * 0.16,
+        page_width * 0.31,
+    ]
+ 
+    rows = [[
+        Paragraph("<b>NOMBRE DE LA CLASE O LABORATORIO</b>", th),
+        Paragraph("<b>HORA</b>", th),
+        Paragraph("<b>FECHA D/M/A</b>", th),
+        Paragraph("<b>OBSERVACIONES</b>", th),
+    ]]
+ 
+    if sessions:
+        for session in sessions:
+            rows.append([
+                Paragraph(escape(_session_subject(session)), td),
+                Paragraph(escape(_session_hour(session)), td_center),
+                Paragraph(session.work_day.strftime("%d/%m/%Y"), td_center),
+                Paragraph(f"LLEGO {session.late_minutes} MINUTOS TARDE", td),
+            ])
+    else:
+        rows.append([
+            Paragraph("Monitoria asignada", td),
+            Paragraph("-", td_center),
+            Paragraph("-", td_center),
+            Paragraph(f"{late_count} llegadas tarde acumuladas", td),
+        ])
+ 
+    details_table = Table(rows, colWidths=col_widths, hAlign="LEFT")
+    details_table.setStyle(TableStyle([
+        ("BACKGROUND",    (0, 0), (-1, 0),  colors.HexColor("#E8E8E8")),
+        ("FONTNAME",      (0, 0), (-1, 0),  "Helvetica-Bold"),
+        ("GRID",          (0, 0), (-1, -1), 0.5, colors.black),
+        ("LEFTPADDING",   (0, 0), (-1, -1), 5),
+        ("RIGHTPADDING",  (0, 0), (-1, -1), 5),
+        ("TOPPADDING",    (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
+    ]))
+ 
+    # ── Encabezado y pie (canvas) ────────────────────────────────────────────
+    # El logo se carga UNA sola vez fuera del callback para no repetir I/O
+    logo_reader = _load_logo()
+ 
+    def _draw_header_footer(canvas, doc):
+        canvas.saveState()
+        page_w, page_h = letter
+ 
+        # --- Logo ---
+        logo_x = LEFT
+        logo_y = page_h - 2.7 * cm
+        logo_w = 3.0 * cm
+        logo_h = 2.2 * cm
+ 
+        if logo_reader is not None:
+            canvas.drawImage(
+                logo_reader,
+                logo_x, logo_y,
+                width=200, height=logo_h,
+                preserveAspectRatio=True,
+                anchor="nw",
+            )
+ 
+       
+ 
+        # --- Línea separadora ---
+        canvas.setStrokeColor(colors.black)
+        canvas.setLineWidth(0.5)
+        canvas.line(LEFT, page_h - 2.85 * cm, page_w - RIGHT, page_h - 2.85 * cm)
+ 
+        # --- Acreditación ---
+        canvas.setFont("Helvetica", 6)
+        canvas.drawString(
+            LEFT, page_h - 3.2 * cm,
+            "Acreditación Institucional de Alta Calidad. Resolución No. 23096 del 15 de diciembre de 2016",
+        )
+        canvas.drawRightString(page_w - RIGHT, page_h - 3.2 * cm, "labiud@udistrital.edu.co")
+ 
+        # --- Pie de página ---
+        footer_y = 1.6 * cm
+        canvas.setLineWidth(0.5)
+        canvas.line(LEFT, footer_y + 0.7 * cm, page_w - RIGHT, footer_y + 0.7 * cm)
+ 
+        canvas.setFont("Helvetica", 7)
+        canvas.drawString(LEFT, footer_y + 0.35 * cm, "PBX 57(1)323 9300 Exts. 1520 – 1521 - 1525")
+        canvas.drawString(
+            LEFT, footer_y,
+            "Carrera 8 No 40 62, Piso 5, Edificio Sabio Caldas, Bogotá D.C. – Colombia",
+        )
+        canvas.drawRightString(page_w - RIGHT, footer_y + 0.35 * cm, "Línea de atención gratuita")
+        canvas.drawRightString(page_w - RIGHT, footer_y, "01 800 091 44 10")
+ 
+        canvas.setFont("Helvetica", 8)
+        canvas.drawCentredString(page_w / 2, footer_y - 0.45 * cm, str(doc.page))
+ 
+        canvas.restoreState()
+ 
+    # ── Story ────────────────────────────────────────────────────────────────
+    story = []
+ 
+    story.append(Paragraph(
+        f"<b>MEMORANDO N. {memorandum_number:03d}-{current_date.year}</b>",
+        centered_title,
+    ))
+    story.append(Spacer(1, 8))
+ 
+    label_w = 2.0 * cm
+    value_w = page_width - label_w
+ 
+    def _meta_row(label: str, value: str):
+        return [
+            Paragraph(f"<b>{label}</b>", bold_label),
+            Paragraph(value, normal),
+        ]
+ 
+    meta_rows = [
+        _meta_row("DE:", "COORDINADOR DE LABORATORIOS-FACULTAD DE INGENIERÍA"),
+        [Paragraph("", normal), Paragraph("Ing. JAIME ANTONIO BENITEZ FORERO", bold_label)],
+        _meta_row("PARA:", f"{escape(monitor.full_name)} - <b>Código: {escape(monitor.codigo_estudiante)}</b>"),
+        [Paragraph("", normal), Paragraph(f"Monitor – {escape(monitor.get_department_display())}", normal)],
+        _meta_row("ASUNTO:", "LLAMADO DE ATENCIÓN"),
+        _meta_row("FECHA:", current_date.strftime("%d/%m/%Y")),
+    ]
+ 
+    meta_table = Table(meta_rows, colWidths=[label_w, value_w], hAlign="LEFT")
+    meta_table.setStyle(TableStyle([
+        ("VALIGN",        (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING",   (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
+        ("TOPPADDING",    (0, 0), (-1, -1), 1),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
+    ]))
+    story.append(meta_table)
+ 
+    story.append(Spacer(1, 4))
+    story.append(HRFlowable(width="100%", thickness=0.5, color=colors.black))
+    story.append(Spacer(1, 10))
+ 
+    story.append(Paragraph(
+        "Por medio del presente se le hace el primer llamado de atención debido al "
+        "incumplimiento en algunas tareas asignadas, recuerde que la puntualidad y "
+        "cumplimiento de cada una de estas hacen parte de su compromiso como monitor "
+        "que es brindar una atención eficaz a docentes y estudiantes del Laboratorio "
+        "de la Facultad de Ingeniería.",
+        justified,
+    ))
+    story.append(Spacer(1, 8))
+    story.append(Paragraph(
+        "A continuación, relaciono las fechas de sus retardos, inasistencias y/o "
+        "faltas en las Monitorias asignadas:",
+        justified,
+    ))
+    story.append(Spacer(1, 10))
+ 
+    story.append(details_table)
+    story.append(Spacer(1, 10))
+ 
+    story.append(Paragraph(
+        "Es importante que tenga en cuenta que, si persiste con el incumplimiento, "
+        "se continuara con el debido proceso.",
+        justified,
+    ))
+    story.append(Spacer(1, 16))
+    story.append(Paragraph("Cordialmente,", normal))
+    story.append(Spacer(1, 36))
+ 
+    story.append(Paragraph("<b>ING. JAIME ANTONIO BENITEZ FORERO</b>", normal))
+    story.append(Paragraph("Coordinador Laboratorios", normal))
+    story.append(Paragraph("Facultad de Ingeniería", normal))
+    story.append(Spacer(1, 14))
+ 
+    story.append(Paragraph("<b>NOTA:</b>", normal))
+    story.append(Paragraph(
+        "✓  LAS LLEGADAS TARDES, INASISTENCIAS Y FALLAS SE ACUMULAN Y AL FINAL DE "
+        "CLASES DEBERA REALIZAR LA REPOSICIÓN LAS CUALES SERÁN ASIGNADAS POR EL "
+        "PERSONAL DEL ALMACEN DE LABORATORIO – FAC. DE INGENIERIA",
+        ParagraphStyle("MemoNota", parent=normal, fontSize=8, leading=11),
+    ))
+ 
+    document.build(story, onFirstPage=_draw_header_footer, onLaterPages=_draw_header_footer)
+    return buffer.getvalue()
+
+@transaction.atomic
+def create_and_send_lateness_memorandum(*, monitor, late_count: int) -> MonitorMemorandum | None:
+    """Crea y envia un memorando cuando se completa un bloque de tres retardos.
+
+    Args:
+        monitor: Monitor evaluado.
+        late_count: Total actual de llegadas tarde.
+
+    Returns:
+        MonitorMemorandum | None: Memorando creado, o ``None`` si no aplica.
+    """
+
+    if late_count < MEMORANDUM_LATE_THRESHOLD or late_count % MEMORANDUM_LATE_THRESHOLD != 0:
+        return None
+    
+    memorandum, created = MonitorMemorandum.objects.get_or_create(
+        monitor=monitor,
+        late_count_threshold=late_count,
+        defaults={"sent_to": monitor.user.email},
+    )
+    if not created:
+        return None
+
+    pdf_bytes = generate_lateness_memorandum_pdf(monitor=monitor, late_count=late_count)
+    safe_name = normalize_text(monitor.full_name).replace(" ", "_") or "monitor"
+    filename = f"Memorando_{late_count}_retardos_{safe_name}_{monitor.codigo_estudiante}.pdf"
+    memorandum.pdf_file.save(filename, ContentFile(pdf_bytes), save=False)
+    if monitor.user is None or not monitor.user.email:
+        return None
+
+    message = EmailMessage(
+        subject=f"Memorando por {late_count} llegadas tarde",
+        body=(
+            f"Cordial saludo {monitor.full_name},\n\n"
+            f"Adjuntamos el memorando generado por completar {late_count} llegadas tarde acumuladas.\n\n"
+            "Sistema de Registro de Asistencia"
+        ),
+        from_email=getattr(settings, "DEFAULT_FROM_EMAIL", None),
+        to=[monitor.user.email],
+    )
+    message.attach(filename, pdf_bytes, "application/pdf")
+    message.send(fail_silently=False)
+
+    memorandum.sent_to = monitor.user.email
+    memorandum.sent_at = timezone.now()
+    memorandum.save(update_fields=["sent_to", "sent_at", "pdf_file", "updated_at"])
+    return memorandum
 
 
 def export_department_dashboard_to_excel(*, user, department: str) -> Path:

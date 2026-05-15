@@ -328,6 +328,14 @@ def process_raw_record_to_session(*, raw_record):
                 },
             )
         )
+    if session.is_late:
+        late_count = WorkSession.objects.filter(
+            monitor=session.monitor,
+            is_late=True,
+        ).exclude(session_state=SessionStateChoices.INVALID).count()
+        from apps.reports.services import create_and_send_lateness_memorandum
+
+        create_and_send_lateness_memorandum(monitor=session.monitor, late_count=late_count)
     return session
 
 

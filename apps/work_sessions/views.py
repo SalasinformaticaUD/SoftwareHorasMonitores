@@ -1,5 +1,8 @@
+from datetime import timedelta
+
 from django.contrib import messages
 from django.core.exceptions import ValidationError
+from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect
 from django.views.generic import TemplateView
 
@@ -10,6 +13,11 @@ from apps.attendance.selectors import (
     visible_inconsistencies_for_user,
     visible_raw_records_for_user,
 )
+from apps.common.choices import (
+    AttendanceInconsistencyActionChoices,
+    AttendanceInconsistencyStatusChoices,
+    AttendanceInconsistencyTypeChoices,
+)
 from apps.attendance.services import (
     assign_monitor_manually,
     invalidate_inconsistent_raw_record,
@@ -17,6 +25,7 @@ from apps.attendance.services import (
 )
 from apps.common.web import AdminOrLeaderRequiredMixin
 from apps.monitors.selectors import visible_monitors_for_user
+from apps.schedules.models import Schedule
 from apps.work_sessions.models import WorkSession
 from apps.work_sessions.selectors import pending_overtime_sessions_for_user
 from apps.work_sessions.services import review_overtime
@@ -55,6 +64,50 @@ class InconsistencyManagementView(AdminOrLeaderRequiredMixin, TemplateView):
     def _visible_inconsistency(self, inconsistency_id):
         return get_object_or_404(visible_inconsistencies_for_user(self.request.user), pk=inconsistency_id)
 
+    @staticmethod
+    def _marking_context_for_inconsistency(inconsistency):
+        monitor = inconsistency.monitor
+        if monitor is None:
+            return []
+
+        days = [inconsistency.work_day + timedelta(days=offset) for offset in (-1, 0, 1)]
+        records_by_day = {
+            day: list(
+                AttendanceRawRecord.objects.filter(
+                    monitor=monitor,
+                    work_day=day,
+                    event_at__isnull=False,
+                )
+                .select_related("paired_record", "duplicate_of")
+                .order_by("event_at", "created_at")
+            )
+            for day in days
+        }
+        schedules_by_weekday = {
+            weekday: list(
+                Schedule.objects.filter(
+                    monitor=monitor,
+                    weekday=weekday,
+                    is_active=True,
+                ).order_by("start_time", "end_time")
+            )
+            for weekday in {day.weekday() for day in days}
+        }
+        labels = {
+            days[0]: "Dia anterior",
+            days[1]: "Dia de la inconsistencia",
+            days[2]: "Dia siguiente",
+        }
+        return [
+            {
+                "day": day,
+                "label": labels[day],
+                "records": records_by_day[day],
+                "schedules": schedules_by_weekday.get(day.weekday(), []),
+            }
+            for day in days
+        ]
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         raw_records = pending_reconciliation_records_for_user(self.request.user).order_by("-work_day", "raw_full_name")[:20]
@@ -63,6 +116,13 @@ class InconsistencyManagementView(AdminOrLeaderRequiredMixin, TemplateView):
             "monitor__full_name",
             "-detected_at",
         )[:40]
+        inconsistency_rows = [
+            {
+                "item": inconsistency,
+                "marking_context": self._marking_context_for_inconsistency(inconsistency),
+            }
+            for inconsistency in attendance_inconsistencies
+        ]
         visible_inconsistencies = visible_inconsistencies_for_user(self.request.user)
         recent_inconsistency_events = (
             AttendanceInconsistencyEvent.objects.select_related(
@@ -72,13 +132,26 @@ class InconsistencyManagementView(AdminOrLeaderRequiredMixin, TemplateView):
                 "actor",
             )
             .filter(inconsistency__in=visible_inconsistencies)
+            .exclude(
+                Q(action=AttendanceInconsistencyActionChoices.DETECTED)
+                | Q(
+                    action=AttendanceInconsistencyActionChoices.AUTO_RESOLVED,
+                    inconsistency__inconsistency_type=AttendanceInconsistencyTypeChoices.DUPLICATE_MARK,
+                )
+            )
             .order_by("-created_at")[:20]
         )
+        resolved_duplicate_inconsistencies = visible_inconsistencies.filter(
+            inconsistency_type=AttendanceInconsistencyTypeChoices.DUPLICATE_MARK,
+            status=AttendanceInconsistencyStatusChoices.RESOLVED,
+        ).order_by("-detected_at")[:20]
         context.update(
             {
                 "raw_records": raw_records,
                 "attendance_inconsistencies": attendance_inconsistencies,
+                "inconsistency_rows": inconsistency_rows,
                 "recent_inconsistency_events": recent_inconsistency_events,
+                "resolved_duplicate_inconsistencies": resolved_duplicate_inconsistencies,
                 "monitor_options": visible_monitors_for_user(self.request.user).filter(is_active=True).order_by("full_name"),
                 "stats": {
                     "raw_pending": pending_reconciliation_records_for_user(self.request.user).count(),

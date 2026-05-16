@@ -76,13 +76,11 @@
                       <input type="hidden" name="action" value="invalidate_inconsistent_raw">
                       <input type="hidden" name="inconsistency_id" value="{{ inconsistency.id }}">
                       <input class="form-control form-control-sm" name="reason" placeholder="Motivo de invalidacion">
-                      <button class="btn btn-sm btn-outline-danger" type="submit" {% if not inconsistency.solution_annotation and not inconsistency.can_resolve_without_annotation %}disabled{% endif %}>
-                        {% if inconsistency.can_resolve_without_annotation %}Invalidar sin ajuste{% else %}Invalidar registro{% endif %}
+                      <button class="btn btn-sm btn-outline-danger" type="submit" {% if not inconsistency.solution_annotation %}disabled{% endif %}>
+                        Invalidar registro
                       </button>
-                      {% if not inconsistency.solution_annotation and not inconsistency.can_resolve_without_annotation %}
+                      {% if not inconsistency.solution_annotation %}
                         <div class="form-text">Primero registra la anotacion de solucion.</div>
-                      {% elif inconsistency.can_resolve_without_annotation %}
-                        <div class="form-text">No requiere anotacion si no se agregan ni descuentan horas.</div>
                       {% endif %}
                     </form>
                   </div>

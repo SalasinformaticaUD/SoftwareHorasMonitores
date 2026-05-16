@@ -209,6 +209,13 @@
                             >
                               PDF {{ memorandum.late_count_threshold }}
                             </a>
+                            <form method="post" class="d-inline">
+                              {% csrf_token %}
+                              <input type="hidden" name="action" value="resend_memorandum">
+                              <input type="hidden" name="monitor_id" value="{{ row.item.id }}">
+                              <input type="hidden" name="memorandum_id" value="{{ memorandum.id }}">
+                              <button class="btn btn-sm btn-outline-secondary" type="submit">Reenviar</button>
+                            </form>
                           {% endfor %}
                         </div>
                       {% endif %}

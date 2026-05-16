@@ -27,7 +27,7 @@ from django.utils import timezone
 
 # Ajusta estos imports según la ubicación real de tus modelos y función
 from apps.reports.models import MonitorMemorandum
-from apps.reports.services import generate_lateness_memorandum_pdf
+from apps.reports.services import generate_lateness_memorandum_pdf, send_lateness_memorandum
 from apps.common.utils import normalize_text
 
 
@@ -120,7 +120,8 @@ class Command(BaseCommand):
 
                 # 4. (Opcional) Reenviar correo
                 if resend_email:
-                    self._send_email(monitor, memo, filename, pdf_bytes, late_count)
+                    send_lateness_memorandum(memorandum=memo)
+                    self.stdout.write(f"    Correo reenviado a {monitor.user.email}")
 
                 ok += 1
 

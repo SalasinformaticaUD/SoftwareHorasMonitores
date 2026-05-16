@@ -177,7 +177,7 @@ def test_pair_raw_attendance_events_detects_short_pair_without_processing_it():
 
 
 @pytest.mark.django_db
-def test_unpaired_inconsistent_raw_record_can_be_invalidated_without_annotation():
+def test_unpaired_inconsistent_raw_record_requires_solution_annotation_before_invalidation():
     leader = UserFactory()
     import_job = AttendanceImportJobFactory(uploaded_by=leader)
     monitor = MonitorFactory(full_name="Ana Torres", department=leader.department)
@@ -188,13 +188,25 @@ def test_unpaired_inconsistent_raw_record_can_be_invalidated_without_annotation(
         inconsistency_type=AttendanceInconsistencyTypeChoices.END_OF_DAY,
     )
 
-    invalidate_inconsistent_raw_record(inconsistency=inconsistency, actor=leader, reason="Se resuelve sin ajuste de horas.")
+    with pytest.raises(ValidationError):
+        invalidate_inconsistent_raw_record(inconsistency=inconsistency, actor=leader, reason="Se resuelve sin ajuste de horas.")
+
+    annotation = AnnotationFactory(
+        leader=leader,
+        monitor=monitor,
+        annotation_type=AnnotationTypeChoices.MISSING_PUNCH,
+        action=AnnotationActionChoices.NOTE,
+        delta_minutes=0,
+        occurred_on=date(2026, 4, 13),
+    )
+    link_annotation_to_inconsistency(inconsistency=inconsistency, annotation=annotation, actor=leader)
+    invalidate_inconsistent_raw_record(inconsistency=inconsistency, actor=leader, reason="Se resuelve con anotacion.")
 
     unpaired.refresh_from_db()
     inconsistency.refresh_from_db()
     assert unpaired.reconciliation_status == ReconciliationStatusChoices.REJECTED
     assert inconsistency.status == AttendanceInconsistencyStatusChoices.RESOLVED
-    assert inconsistency.solution_annotation is None
+    assert inconsistency.solution_annotation == annotation
 
 
 @pytest.mark.django_db

@@ -50,7 +50,7 @@ class MonitorMemorandum(BaseModel):
 
     monitor = models.ForeignKey("monitors.Monitor", on_delete=models.CASCADE, related_name="memorandums")
     late_count_threshold = models.PositiveIntegerField()
-    sent_to = models.EmailField()
+    sent_to = models.EmailField(blank=True)
     pdf_file = models.FileField(upload_to="memorandos/%Y/%m/%d", blank=True)
     sent_at = models.DateTimeField(null=True, blank=True)
 
@@ -68,4 +68,3 @@ class MonitorMemorandum(BaseModel):
 
     def __str__(self) -> str:
         return f"Memorando {self.late_count_threshold} retardos - {self.monitor}"
-

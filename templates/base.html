@@ -65,6 +65,7 @@
                     <a class="nav-chip {% if request.resolver_match.url_name == 'admin-monitors' %}is-active{% endif %}" href="{% url 'admin-monitors' %}">Monitores</a>
                     <a class="nav-chip {% if request.resolver_match.url_name == 'admin-schedules' %}is-active{% endif %}" href="{% url 'admin-schedules' %}">Horarios</a>
                     <a class="nav-chip {% if request.resolver_match.url_name == 'overtime-review' %}is-active{% endif %}" href="{% url 'overtime-review' %}">Horas extra</a>
+                    <a class="nav-chip {% if request.resolver_match.url_name == 'memorandums-manage' %}is-active{% endif %}" href="{% url 'memorandums-manage' %}">Memorandos</a>
                     <a class="nav-chip {% if request.resolver_match.url_name == 'admin-commitment-acts' %}is-active{% endif %}" href="{% url 'admin-commitment-acts' %}">Actas</a>
                     <a class="nav-chip {% if request.resolver_match.url_name == 'attendance-upload' %}is-active{% endif %}" href="{% url 'attendance-upload' %}">Importar Registros</a>
                     <a class="nav-chip {% if request.resolver_match.url_name == 'attendance-reconciliation' %}is-active{% endif %}" href="{% url 'attendance-reconciliation' %}">Conciliación</a>

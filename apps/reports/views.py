@@ -12,6 +12,7 @@ from io import BytesIO
 from zipfile import ZIP_DEFLATED, ZipFile
 from django.core.exceptions import PermissionDenied
 from django.http import FileResponse, Http404, HttpResponse
+from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from django.views import View
 from django.views.generic import FormView, TemplateView
@@ -36,8 +37,10 @@ from apps.reports.services import (
     export_department_dashboard_to_excel,
     get_dashboard_export_directory,
     get_signed_commitment_acts_directory,
+    send_lateness_memorandum,
     signed_commitment_act_for_monitor,
 )
+from apps.reports.models import MonitorMemorandum
 from django.core.exceptions import ValidationError
 
 
@@ -203,6 +206,85 @@ class CommitmentActAdminView(AdminOrLeaderRequiredMixin, TemplateView):
             }
         )
         return context
+
+
+class MemorandumAdminView(AdminOrLeaderRequiredMixin, TemplateView):
+    """Lista memorandos generados y permite reenviarlos."""
+
+    template_name = "reports/memorandums.html"
+    paginate_by = 20
+
+    def _base_queryset(self):
+        visible_monitors = visible_monitors_for_user(self.request.user)
+        queryset = MonitorMemorandum.objects.select_related("monitor", "monitor__user").filter(
+            monitor__in=visible_monitors
+        )
+        query = self.request.GET.get("q", "").strip()
+        status = self.request.GET.get("status", "").strip()
+        department = self.request.GET.get("department", "").strip()
+
+        if query:
+            queryset = queryset.filter(
+                Q(monitor__full_name__icontains=query)
+                | Q(monitor__codigo_estudiante__icontains=query)
+                | Q(monitor__user__email__icontains=query)
+                | Q(sent_to__icontains=query)
+            )
+        if department and self.request.user.role == UserRoleChoices.ADMIN:
+            queryset = queryset.filter(monitor__department=department)
+        if status == "sent":
+            queryset = queryset.filter(sent_at__isnull=False)
+        elif status == "pending":
+            queryset = queryset.filter(sent_at__isnull=True)
+        elif status == "missing_email":
+            queryset = queryset.filter(Q(monitor__user__isnull=True) | Q(monitor__user__email=""))
+
+        return queryset.order_by("-created_at", "monitor__full_name")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        queryset = self._base_queryset()
+        visible_queryset = MonitorMemorandum.objects.filter(monitor__in=visible_monitors_for_user(self.request.user))
+        pagination = paginate_collection(self.request, queryset, per_page=self.paginate_by)
+        context.update(
+            {
+                "memorandums": pagination["page_obj"].object_list,
+                "departments": DepartmentChoices.choices,
+                "filters": {
+                    "q": self.request.GET.get("q", "").strip(),
+                    "status": self.request.GET.get("status", "").strip(),
+                    "department": self.request.GET.get("department", "").strip(),
+                },
+                "stats": {
+                    "total": visible_queryset.count(),
+                    "sent": visible_queryset.filter(sent_at__isnull=False).count(),
+                    "pending": visible_queryset.filter(sent_at__isnull=True).count(),
+                    "missing_email": visible_queryset.filter(
+                        Q(monitor__user__isnull=True) | Q(monitor__user__email="")
+                    ).count(),
+                },
+                **pagination,
+            }
+        )
+        return context
+
+    def post(self, request, *args, **kwargs):
+        if request.POST.get("action") != "resend_memorandum":
+            messages.error(request, "Accion no reconocida.")
+            return redirect("memorandums-manage")
+
+        memorandum = get_object_or_404(
+            MonitorMemorandum.objects.select_related("monitor", "monitor__user").filter(
+                monitor__in=visible_monitors_for_user(request.user)
+            ),
+            pk=request.POST.get("memorandum_id"),
+        )
+        try:
+            send_lateness_memorandum(memorandum=memorandum)
+            messages.success(request, "Memorando reenviado correctamente.")
+        except ValidationError as exc:
+            messages.error(request, "; ".join(exc.messages))
+        return redirect("memorandums-manage")
 
 
 class GeneratedCommitmentActAdminDownloadView(AdminOrLeaderRequiredMixin, View):

@@ -28,6 +28,7 @@ from reportlab.platypus import (
 )
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.core.files.base import ContentFile
 from django.core.mail import EmailMessage
 from django.db import transaction
@@ -208,6 +209,71 @@ LOGO_PATH = r"C:\Users\ud\Documents\MonitoresV1.1.0\SoftwareHorasMonitores\stati
 MEMORANDUM_LATE_THRESHOLD = 3
  
  
+def _monitor_email(monitor) -> str:
+    user = getattr(monitor, "user", None)
+    return (getattr(user, "email", "") or "").strip()
+
+
+def _memorandum_filename(*, monitor, late_count: int) -> str:
+    safe_name = normalize_text(monitor.full_name).replace(" ", "_") or "monitor"
+    return f"Memorando_{late_count}_retardos_{safe_name}_{monitor.codigo_estudiante}.pdf"
+
+
+def _format_time(value) -> str:
+    value = _as_time(value)
+    return value.strftime("%H:%M:%S") if getattr(value, "second", 0) else value.strftime("%H:%M")
+
+
+def _as_time(value):
+    if isinstance(value, datetime):
+        if timezone.is_aware(value):
+            value = timezone.localtime(value)
+        return value.time()
+    return value
+
+
+def _lateness_observation(session) -> str:
+    schedule = session.schedule
+    actual_start = _as_time(session.actual_start)
+    if not schedule:
+        return f"LLEGO A LAS {_format_time(actual_start)}"
+
+    scheduled_at = datetime.combine(session.work_day, schedule.start_time)
+    actual_at = datetime.combine(session.work_day, actual_start)
+    late_seconds = max(int((actual_at - scheduled_at).total_seconds()), 0)
+    minutes, seconds = divmod(late_seconds, 60)
+    if seconds:
+        delay = f"{minutes} MIN {seconds} SEG"
+    else:
+        delay = f"{minutes} MINUTOS"
+    return f"LLEGO A LAS {_format_time(actual_start)} ({delay} TARDE)"
+
+
+def _deliver_lateness_memorandum_email(
+    *,
+    monitor,
+    email: str,
+    filename: str,
+    pdf_bytes: bytes,
+    late_count: int,
+    updated: bool = False,
+) -> None:
+    qualifier = "actualizado " if updated else ""
+    message = EmailMessage(
+        subject=f"Memorando por {late_count} llegadas tarde",
+        body=(
+            f"Cordial saludo {monitor.full_name},\n\n"
+            f"Adjuntamos el memorando {qualifier}generado por completar "
+            f"{late_count} llegadas tarde acumuladas.\n\n"
+            "Sistema de Registro de Asistencia"
+        ),
+        from_email=getattr(settings, "DEFAULT_FROM_EMAIL", None),
+        to=[email],
+    )
+    message.attach(filename, pdf_bytes, "application/pdf")
+    message.send(fail_silently=False)
+
+
 def _load_logo() -> ImageReader | None:
     """Carga el logo como ImageReader en memoria usando Pillow.
     Compone sobre fondo blanco para evitar el fondo negro en ReportLab."""
@@ -357,7 +423,7 @@ def generate_lateness_memorandum_pdf(*, monitor, late_count: int) -> bytes:
                 Paragraph(escape(_session_subject(session)), td),
                 Paragraph(escape(_session_hour(session)), td_center),
                 Paragraph(session.work_day.strftime("%d/%m/%Y"), td_center),
-                Paragraph(f"LLEGO {session.late_minutes} MINUTOS TARDE", td),
+                Paragraph(escape(_lateness_observation(session)), td),
             ])
     else:
         rows.append([
@@ -521,9 +587,49 @@ def generate_lateness_memorandum_pdf(*, monitor, late_count: int) -> bytes:
     document.build(story, onFirstPage=_draw_header_footer, onLaterPages=_draw_header_footer)
     return buffer.getvalue()
 
+
+@transaction.atomic
+def send_lateness_memorandum(*, memorandum: MonitorMemorandum) -> MonitorMemorandum:
+    """Envia o reenvia un memorando existente al correo actual del monitor."""
+
+    monitor = memorandum.monitor
+    email = _monitor_email(monitor)
+    if not email:
+        raise ValidationError("El monitor no tiene correo registrado para enviar el memorando.")
+
+    late_count = memorandum.late_count_threshold
+    filename = _memorandum_filename(monitor=monitor, late_count=late_count)
+    if memorandum.pdf_file:
+        stored_name = memorandum.pdf_file.name.rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
+        filename = stored_name or filename
+        with memorandum.pdf_file.open("rb") as handle:
+            pdf_bytes = handle.read()
+        update_fields = ["sent_to", "sent_at", "updated_at"]
+    else:
+        pdf_bytes = generate_lateness_memorandum_pdf(monitor=monitor, late_count=late_count)
+        memorandum.pdf_file.save(filename, ContentFile(pdf_bytes), save=False)
+        update_fields = ["sent_to", "sent_at", "pdf_file", "updated_at"]
+
+    _deliver_lateness_memorandum_email(
+        monitor=monitor,
+        email=email,
+        filename=filename,
+        pdf_bytes=pdf_bytes,
+        late_count=late_count,
+        updated=memorandum.sent_at is not None,
+    )
+    memorandum.sent_to = email
+    memorandum.sent_at = timezone.now()
+    memorandum.save(update_fields=update_fields)
+    return memorandum
+
+
 @transaction.atomic
 def create_and_send_lateness_memorandum(*, monitor, late_count: int) -> MonitorMemorandum | None:
-    """Crea y envia un memorando cuando se completa un bloque de tres retardos.
+    """Crea un memorando cuando se completa un bloque de tres retardos.
+
+    Si el monitor tiene correo, tambien se envia. Si no tiene correo, se guarda
+    el PDF y queda pendiente para reenviarlo cuando se complete el dato.
 
     Args:
         monitor: Monitor evaluado.
@@ -535,36 +641,33 @@ def create_and_send_lateness_memorandum(*, monitor, late_count: int) -> MonitorM
 
     if late_count < MEMORANDUM_LATE_THRESHOLD or late_count % MEMORANDUM_LATE_THRESHOLD != 0:
         return None
+
+    email = _monitor_email(monitor)
     
     memorandum, created = MonitorMemorandum.objects.get_or_create(
         monitor=monitor,
         late_count_threshold=late_count,
-        defaults={"sent_to": monitor.user.email},
+        defaults={"sent_to": email},
     )
     if not created:
         return None
 
     pdf_bytes = generate_lateness_memorandum_pdf(monitor=monitor, late_count=late_count)
-    safe_name = normalize_text(monitor.full_name).replace(" ", "_") or "monitor"
-    filename = f"Memorando_{late_count}_retardos_{safe_name}_{monitor.codigo_estudiante}.pdf"
+    filename = _memorandum_filename(monitor=monitor, late_count=late_count)
     memorandum.pdf_file.save(filename, ContentFile(pdf_bytes), save=False)
-    if monitor.user is None or not monitor.user.email:
-        return None
 
-    message = EmailMessage(
-        subject=f"Memorando por {late_count} llegadas tarde",
-        body=(
-            f"Cordial saludo {monitor.full_name},\n\n"
-            f"Adjuntamos el memorando generado por completar {late_count} llegadas tarde acumuladas.\n\n"
-            "Sistema de Registro de Asistencia"
-        ),
-        from_email=getattr(settings, "DEFAULT_FROM_EMAIL", None),
-        to=[monitor.user.email],
+    if not email:
+        memorandum.save(update_fields=["sent_to", "pdf_file", "updated_at"])
+        return memorandum
+
+    _deliver_lateness_memorandum_email(
+        monitor=monitor,
+        email=email,
+        filename=filename,
+        pdf_bytes=pdf_bytes,
+        late_count=late_count,
     )
-    message.attach(filename, pdf_bytes, "application/pdf")
-    message.send(fail_silently=False)
-
-    memorandum.sent_to = monitor.user.email
+    memorandum.sent_to = email
     memorandum.sent_at = timezone.now()
     memorandum.save(update_fields=["sent_to", "sent_at", "pdf_file", "updated_at"])
     return memorandum

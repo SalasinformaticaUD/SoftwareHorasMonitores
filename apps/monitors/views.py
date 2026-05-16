@@ -21,6 +21,7 @@ from apps.monitors.services import (
     update_monitor_with_user,
 )
 from apps.reports.models import MonitorMemorandum
+from apps.reports.services import send_lateness_memorandum
 
 
 class MonitorAdminView(AdminOrLeaderRequiredMixin, TemplateView):
@@ -196,6 +197,16 @@ class MonitorAdminView(AdminOrLeaderRequiredMixin, TemplateView):
                     messages.success(request, "Correo de activacion reenviado.")
                 else:
                     messages.warning(request, "No fue posible preparar el correo de activacion.")
+            except ValidationError as exc:
+                messages.error(request, "; ".join(exc.messages))
+        elif action == "resend_memorandum":
+            memorandum = get_object_or_404(
+                MonitorMemorandum.objects.select_related("monitor", "monitor__user").filter(monitor=monitor),
+                pk=request.POST.get("memorandum_id"),
+            )
+            try:
+                send_lateness_memorandum(memorandum=memorandum)
+                messages.success(request, "Memorando reenviado correctamente.")
             except ValidationError as exc:
                 messages.error(request, "; ".join(exc.messages))
         elif action == "delete":

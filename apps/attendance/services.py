@@ -639,7 +639,7 @@ def link_annotation_to_inconsistency(*, inconsistency: AttendanceInconsistency, 
 
 @transaction.atomic
 def invalidate_inconsistent_raw_record(*, inconsistency: AttendanceInconsistency, actor, reason: str):
-    if inconsistency.solution_annotation_id is None and not inconsistency.can_resolve_without_annotation:
+    if inconsistency.solution_annotation_id is None:
         raise ValidationError("Antes de invalidar el registro debes registrar una anotacion como solucion.")
     raw_record = reject_raw_record(raw_record=inconsistency.raw_record, actor=actor, reason=reason)
     inconsistency.status = AttendanceInconsistencyStatusChoices.RESOLVED
@@ -651,7 +651,7 @@ def invalidate_inconsistent_raw_record(*, inconsistency: AttendanceInconsistency
         inconsistency=inconsistency,
         actor=actor,
         action=AttendanceInconsistencyActionChoices.INVALIDATED,
-        note=reason.strip() if inconsistency.solution_annotation_id else f"Sin ajuste de horas: {reason.strip()}",
+        note=reason.strip(),
     )
     return raw_record
 

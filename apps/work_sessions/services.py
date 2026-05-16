@@ -237,6 +237,7 @@ def process_raw_record_to_session(*, raw_record):
         return raw_record.work_session
     except WorkSession.DoesNotExist:
         pass
+
     if not raw_record.is_processable:
         raise ValidationError("El registro crudo no es procesable.")
 

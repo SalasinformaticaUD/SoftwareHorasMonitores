@@ -19,6 +19,7 @@ from apps.reports.views import (
     DepartmentDashboardExportView,
     GeneratedCommitmentActAdminDownloadView,
     LeaderDashboardView,
+    MemorandumAdminView,
     MonitorCommitmentActPdfView,
     MonitorRecordsDetailView,
     PublicMonitorLookupView,
@@ -55,6 +56,7 @@ urlpatterns = [
         name="admin-monitor-memorandum-pdf",
     ),
     path("admin/schedules/", ScheduleAdminView.as_view(), name="admin-schedules"),
+    path("memorandos/", MemorandumAdminView.as_view(), name="memorandums-manage"),
     path("admin/actas-compromiso/", CommitmentActAdminView.as_view(), name="admin-commitment-acts"),
     path(
         "admin/actas-compromiso/firmadas.zip",

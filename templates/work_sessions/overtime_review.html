@@ -43,6 +43,11 @@
     gap: 0.75rem;
     flex-wrap: wrap;
   }
+
+  :root {
+    --bs-secondary-rgb: 118, 19, 22;
+    --text-bg-secondary: 108,117,125;
+  }
 </style>
 
 <div class="card shadow-sm">
@@ -95,7 +100,7 @@
         </thead>
         <tbody>
           {% for session in sessions %}
-            <tr
+            <tr  class="border-bottom border-2 border-secondary"
               data-monitor="{{ session.monitor.full_name }}"
               data-work-day="{{ session.work_day|date:'Y-m-d' }}"
               data-overtime-hours="{{ session.overtime_minutes|minutes_to_hours }}"

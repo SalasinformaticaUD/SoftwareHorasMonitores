@@ -25,7 +25,6 @@ NO MODIFICAR:
 * 
 
 SIGUIENTE PASO:
-* Revisar informe
 * Terminar la funcion de creacion de acta (Electrica), colocando el contenido correcto 
 * Recoleccion de correos de monitores y actualizacion de los mismos (Electrica y fisica)
 * Realizar pruebas funcionales con los registros ya cargados por parte del líder.

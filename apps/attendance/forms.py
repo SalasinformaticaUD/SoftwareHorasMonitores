@@ -6,7 +6,12 @@ from apps.monitors.models import Monitor
 
 
 class AttendanceUploadForm(forms.Form):
-    file = forms.FileField(label="Archivo Excel")
+    file = forms.FileField(
+        label="Archivo Excel",
+        widget=forms.ClearableFileInput(attrs={
+            'class': 'form-control'
+        })
+    )
 
 
 class ManualReconciliationForm(forms.Form):

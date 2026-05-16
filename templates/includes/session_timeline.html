@@ -258,6 +258,13 @@
     text-align: center;
   }
 
+  :root {
+    --bs-secondary-rgb: 118, 19, 22;
+  }
+  .text-bg-secondary {
+    --bs-secondary-rgb: 108,117,125;
+  }
+
   @media (max-width: 991.98px) {
     .session-timeline-shell {
       max-height: 38rem;
@@ -273,7 +280,7 @@
 
 <div class="session-timeline-shell">
   {% for row in timeline_rows %}
-    <article class="attendance-timeline-card">
+    <article class="attendance-timeline-card border-bottom border-2 border-secondary">
       <div class="attendance-timeline-header">
         <div>
           <h3 class="attendance-timeline-title">{{ row.session.monitor.full_name }}</h3>

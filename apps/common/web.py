@@ -52,8 +52,8 @@ def enforce_public_lookup_limit(request, limit: int | None = None, window_second
     client_ip = request.META.get("REMOTE_ADDR", "anonymous")
     cache_key = "public_lookup:{0}".format(client_ip)
     current = cache.get(cache_key, 0)
-    if current >= limit:
-        raise PermissionDenied("Se alcanzó el límite de consultas por hora.")
+    # if current >= limit:
+    #     raise PermissionDenied("Se alcanzó el límite de consultas por hora.")
     cache.set(cache_key, current + 1, timeout=window_seconds)
 
 

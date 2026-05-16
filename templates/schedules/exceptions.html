@@ -33,6 +33,13 @@
     gap: 0.75rem;
     flex-wrap: wrap;
   }
+
+
+  :root {
+    --bs-secondary-rgb: 118, 19, 22;
+    --text-bg-secondary: 108,117,125;
+  }
+</style>
 </style>
 
 <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-2 mb-4">
@@ -52,10 +59,10 @@
 <div class="alert alert-light border mb-4">
   <strong>Estados de las excepciones:</strong>
   <div class="small text-muted mt-2">
-    <div><strong>Vigente:</strong> la excepción está activa y la fecha actual está dentro del rango.</div>
-    <div><strong>Programada:</strong> la excepción está activa, pero su fecha inicial todavía no llega.</div>
-    <div><strong>Activa:</strong> la excepción sigue marcada como activa, aunque su rango de fechas ya terminó.</div>
-    <div><strong>Inactiva:</strong> la excepción está desactivada y no aplica sobre las sesiones.</div>
+    <div><strong>Vigente:</strong> La excepción está activa y la fecha actual está dentro del rango.</div>
+    <div><strong>Programada:</strong> La excepción está activa, pero su fecha inicial todavía no llega.</div>
+    <div><strong>Activa:</strong> La excepción sigue marcada como activa, aunque su rango de fechas ya terminó.</div>
+    <div><strong>Inactiva:</strong> La excepción está desactivada y no aplica sobre las sesiones.</div>
   </div>
 </div>
 
@@ -149,7 +156,7 @@
             </thead>
             <tbody>
               {% for row in exceptions %}
-                <tr class="exception-row">
+                <tr class="exception-row  border-bottom border-2 border-secondary">
                   <td>
                     <strong>{{ row.item.name }}</strong>
                     {% if row.item.description %}

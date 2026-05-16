@@ -104,6 +104,11 @@
     color: #726252;
     font-size: 0.9rem;
   }
+
+  :root {
+    --bs-secondary-rgb: 118, 19, 22;
+    --text-bg-secondary: 108,117,125;
+  }
 </style>
 <div class="admin-module">
   <div class="admin-crumb">
@@ -280,7 +285,7 @@
               </thead>
               <tbody>
                 {% for schedule in schedules %}
-                  <tr>
+                  <tr class="border-bottom border-2 border-secondary">
                     <td>
                       <strong>{{ schedule.monitor.full_name }}</strong>
                       <div class="small text-muted">{{ schedule.monitor.user.email|default:schedule.monitor.codigo_estudiante }}</div>
@@ -307,7 +312,7 @@
                       {% endif %}
                     </td>
                     <td class="text-end">
-                      <div class="d-inline-flex gap-2">
+                      <div class="gap-2">
                         <a class="btn btn-sm btn-outline-primary btn-icon" href="{% url 'admin-schedules' %}?edit={{ schedule.id }}"><span aria-hidden="true">✎</span> Editar</a>
                         <button class="btn btn-sm btn-outline-danger btn-icon" type="button" data-bs-toggle="modal" data-bs-target="#delete-schedule-{{ schedule.id }}"><span aria-hidden="true">×</span> Eliminar</button>
                       </div>

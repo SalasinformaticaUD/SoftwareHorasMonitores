@@ -1,7 +1,7 @@
 from typing import List
 
 from django.db.models import Q, QuerySet
-
+from django.utils import timezone
 from apps.common.choices import AttendanceInconsistencyStatusChoices, ReconciliationStatusChoices, UserRoleChoices
 from apps.attendance.models import AttendanceImportJob, AttendanceInconsistency, AttendanceRawRecord
 

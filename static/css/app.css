@@ -14,6 +14,8 @@
   --ud-radius-xl: 28px;
   --ud-radius-lg: 22px;
   --ud-radius-md: 16px;
+  --bs-secondary-rgb: 118, 19, 22;
+  --text-bg-secondary: 108,117,125;
 }
 
 *,

@@ -181,7 +181,7 @@
               </thead>
               <tbody>
                 {% for row in monitors %}
-                  <tr>
+                  <tr  class="border-bottom border-2 border-secondary">
                     <td>
                       <strong>{{ row.item.full_name }}</strong>
                       {% if row.item.proyecto_curricular %}
@@ -292,6 +292,11 @@
 .modal {
   z-index: 1060 !important;
 }
+
+:root {
+    --bs-secondary-rgb: 118, 19, 22;
+    --text-bg-secondary: 108,117,125;
+  }
 </style>
 
 <script>

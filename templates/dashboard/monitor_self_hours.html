@@ -203,44 +203,99 @@
               <th>Salida</th>
               <th>Normales (h)</th>
               <th>Extra (h)</th>
+              <th>Ajuste (h)</th>
               <th>Retraso (h)</th>
               <th>Estado extra</th>
             </tr>
           </thead>
           <tbody>
             {% for session in result.recent_sessions %}
-              <tr class="monitor-record-row">
-                <td><strong>{{ session.work_day }}</strong></td>
-                <td>{{ session.actual_start|time:"H:i:s" }}</td>
-                <td>{{ session.actual_end|time:"H:i:s" }}</td>
-                <td>{{ session.normal_minutes|minutes_to_hours }}</td>
-                <td>{{ session.overtime_minutes|minutes_to_hours }}</td>
-                <td>
-                  {{ session.late_minutes|minutes_to_hours }}
-                  {% if session.lateness_excused %}
-                    <div><span class="badge text-bg-info mt-1">Exento</span></div>
-                  {% endif %}
-                </td>
-                <td>
-                  {% if session.overtime_status == "approved" %}
-                    <span class="badge text-bg-success">{{ session.get_overtime_status_display }}</span>
-                  {% elif session.overtime_status == "pending" %}
-                    <span class="badge text-bg-warning">{{ session.get_overtime_status_display }}</span>
-                  {% elif session.overtime_status == "rejected" %}
-                    <span class="badge text-bg-danger">{{ session.get_overtime_status_display }}</span>
-                  {% else %}
-                    <span class="badge text-bg-secondary">{{ session.get_overtime_status_display }}</span>
-                  {% endif %}
-                  {% if session.overtime_auto_approved and session.overtime_exception %}
-                    <div class="small text-muted mt-1">Extra: {{ session.overtime_exception.name }}</div>
-                  {% endif %}
-                  {% if session.lateness_excused and session.lateness_exception %}
-                    <div class="small text-muted mt-1">Retraso: {{ session.lateness_exception.name }}</div>
-                  {% endif %}
-                </td>
-              </tr>
+<tr class="monitor-record-row">
+
+  <td><strong>{{ session.work_day }}</strong></td>
+
+  <td>
+    {% if session.actual_start %}
+      {{ session.actual_start|time:"H:i:s" }}
+    {% else %}
+      —
+    {% endif %}
+  </td>
+
+  <td>
+    {% if session.actual_end %}
+      {{ session.actual_end|time:"H:i:s" }}
+    {% else %}
+      —
+    {% endif %}
+  </td>
+
+  <td>{{ session.normal_minutes|minutes_to_hours }}</td>
+
+  <td>{{ session.overtime_minutes|minutes_to_hours }}</td>
+
+  <!-- AJUSTE -->
+  <td>
+    {% if session.adjustment_minutes > 0 %}
+      <span class="badge text-bg-success">
+        +{{ session.adjustment_minutes|minutes_to_hours }} h
+      </span>
+    {% elif session.adjustment_minutes < 0 %}
+      <span class="badge text-bg-danger">
+        {{ session.adjustment_minutes|minutes_to_hours }} h
+      </span>
+    {% else %}
+      <span class="text-muted">0 h</span>
+    {% endif %}
+  </td>
+
+  <!-- RETRASO -->
+  <td>
+    {{ session.late_minutes|minutes_to_hours }}
+
+    {% if session.lateness_excused %}
+      <div>
+        <span class="badge text-bg-info mt-1">Exento</span>
+      </div>
+    {% endif %}
+  </td>
+
+  <!-- ESTADO -->
+  <td>
+
+    {% if session.overtime_status == "Aprobado" %}
+      <span class="badge text-bg-success">{{ session.overtime_status }}</span>
+
+    {% elif session.overtime_status == "Pendiente" %}
+      <span class="badge text-bg-warning">{{ session.overtime_status }}</span>
+
+    {% elif session.overtime_status == "Rechazado" %}
+      <span class="badge text-bg-danger">{{ session.overtime_status }}</span>
+
+    {% elif session.overtime_status == "manual" %}
+      <span class="badge text-bg-primary">Ajuste manual</span>
+
+    {% else %}
+      <span class="badge text-bg-secondary">{{ session.overtime_status }}</span>
+    {% endif %}
+
+    {% if session.overtime_auto_approved and session.overtime_exception %}
+      <div class="small text-muted mt-1">
+        Extra: {{ session.overtime_exception.name }}
+      </div>
+    {% endif %}
+
+    {% if session.lateness_excused and session.lateness_exception %}
+      <div class="small text-muted mt-1">
+        Retraso: {{ session.lateness_exception.name }}
+      </div>
+    {% endif %}
+
+  </td>
+
+</tr>
             {% empty %}
-              <tr><td class="text-center text-muted py-4" colspan="7">Sin historial.</td></tr>
+              <tr><td class="text-center text-muted py-4" colspan="8">Sin historial.</td></tr>
             {% endfor %}
           </tbody>
         </table>

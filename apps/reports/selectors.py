@@ -13,9 +13,10 @@ from typing import Optional
 
 from django.db.models import Case, Count, IntegerField, Q, Sum, Value, When
 from django.db.models.functions import Coalesce
-
+from django.utils import timezone
 from apps.annotations.models import Annotation
 from apps.annotations.selectors import visible_annotations_for_user
+from apps.attendance.models import AttendanceInconsistency
 from apps.attendance.selectors import raw_history_for_user
 from apps.common.choices import DepartmentChoices
 from apps.common.choices import OvertimeStatusChoices, SessionStateChoices, UserRoleChoices
@@ -506,28 +507,109 @@ def build_dashboard_context(user) -> dict:
 
 
 def monitor_lookup_result(*, monitor):
-    """Prepara el resultado de consulta detallada de un monitor.
+    """Prepara el resultado de consulta detallada de un monitor."""
 
-    Args:
-        monitor: Monitor consultado; puede ser ``None``.
-
-    Returns:
-        dict | None: Datos del monitor, metricas, sesiones recientes y timeline,
-        o ``None`` cuando no existe monitor.
-    """
     if not monitor:
         return None
+
     metrics = aggregate_monitor_metrics(monitor=monitor)
+
     recent_sessions = (
         WorkSession.objects.filter(monitor=monitor)
         .exclude(session_state=SessionStateChoices.INVALID)
-        .select_related("raw_record", "schedule", "lateness_exception", "overtime_exception")
+        .select_related(
+            "raw_record",
+            "schedule",
+            "lateness_exception",
+            "overtime_exception",
+        )
+        .prefetch_related(
+            "raw_record__inconsistencies__solution_annotation",
+        )
         .order_by("-work_day", "-actual_start")
     )
+
+    history_rows = []
+
+    # =========================
+    # SESIONES NORMALES
+    # =========================
+    for session in recent_sessions:
+
+        adjustment_minutes = 0
+
+        if session.raw_record:
+            adjustment_minutes = (
+                session.raw_record.inconsistencies.filter(
+                    solution_annotation__isnull=False
+                ).aggregate(
+                    total=Sum("solution_annotation__delta_minutes")
+                )["total"] or 0
+            )
+
+        history_rows.append({
+            "is_manual_adjustment": False,
+            "work_day": session.work_day,
+            "actual_start": session.actual_start,
+            "actual_end": session.actual_end,
+            "normal_minutes": session.normal_minutes,
+            "overtime_minutes": session.overtime_minutes,
+            "adjustment_minutes": adjustment_minutes,
+            "late_minutes": session.late_minutes,
+            "lateness_excused": session.lateness_excused,
+            "lateness_exception": session.lateness_exception,
+            "overtime_status": session.get_overtime_status_display(),
+            "overtime_auto_approved": session.overtime_auto_approved,
+            "overtime_exception": session.overtime_exception,
+        })
+
+    # =========================
+    # INCONSISTENCIAS SIN SESION
+    # =========================
+    existing_days = {row["work_day"] for row in history_rows}
+
+    resolved_inconsistencies = (
+        AttendanceInconsistency.objects.filter(
+            monitor=monitor,
+            solution_annotation__isnull=False,
+        )
+        .exclude(work_day__in=existing_days)
+        .select_related("solution_annotation")
+    )
+
+    for inconsistency in resolved_inconsistencies:
+
+        history_rows.append({
+            "is_manual_adjustment": True,
+            "work_day": inconsistency.work_day,
+            "actual_start": None,
+            "actual_end": None,
+            "normal_minutes": 0,
+            "overtime_minutes": 0,
+            "adjustment_minutes": inconsistency.solution_annotation.delta_minutes,
+            "late_minutes": 0,
+            "lateness_excused": False,
+            "lateness_exception": None,
+            "overtime_status": "manual",
+            "overtime_auto_approved": False,
+            "overtime_exception": None,
+        })
+
+    # =========================
+    # ORDENAR HISTORIAL
+    # =========================
+    history_rows.sort(
+        key=lambda row: (
+            row["work_day"],
+            row["actual_start"] or timezone.datetime.min.time(),
+        ),
+        reverse=True,
+    )
+
     return {
         "monitor": monitor,
         "metrics": metrics,
-        "recent_sessions": recent_sessions,
+        "recent_sessions": history_rows,
         "timeline_rows": build_session_timeline_rows(recent_sessions),
         "timeline_hours": range(6, 23, 2),
     }

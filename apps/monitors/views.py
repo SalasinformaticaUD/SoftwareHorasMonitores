@@ -84,9 +84,9 @@ class MonitorAdminView(AdminOrLeaderRequiredMixin, TemplateView):
     @staticmethod
     def _account_status(monitor):
         if not monitor.is_active or (monitor.user and not monitor.user.is_active):
-            return {"label": "Inactiva", "badge_class": "text-bg-dark"}
+            return {"label": "Inactivo", "badge_class": "text-bg-dark"}
         if monitor.user and monitor.user.has_usable_password():
-            return {"label": "Activa", "badge_class": "text-bg-primary"}
+            return {"label": "Activo", "badge_class": "text-bg-primary"}
         return {"label": "Pendiente", "badge_class": "text-bg-warning"}
 
     def _selected_monitor(self):

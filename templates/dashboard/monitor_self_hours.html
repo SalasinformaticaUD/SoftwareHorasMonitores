@@ -46,7 +46,7 @@
     flex-wrap: wrap;
   }
 
-  .monitor-record-intro p + p {
+  .monitor-record-intro p+p {
     display: none;
   }
 </style>
@@ -70,7 +70,8 @@
       <h2 class="h5">{{ result.monitor.full_name }}</h2>
       <p class="mb-1">Codigo: {{ result.monitor.codigo_estudiante }}</p>
       <p class="mb-1">Documento: {{ result.monitor.numero_documento|default:"Pendiente" }}</p>
-      <p class="mb-1">Proyecto curricular: {% if result.monitor.proyecto_curricular %}{{ result.monitor.get_proyecto_curricular_display }}{% else %}Pendiente{% endif %}</p>
+      <p class="mb-1">Proyecto curricular: {% if result.monitor.proyecto_curricular %}{{
+        result.monitor.get_proyecto_curricular_display }}{% else %}Pendiente{% endif %}</p>
       <p class="mb-1">Telefono: {{ result.monitor.telefono|default:"Pendiente" }}</p>
       <p class="mb-0">Dependencia: {{ result.monitor.get_department_display }}</p>
     </div>
@@ -78,7 +79,8 @@
   <div class="card admin-card mb-4">
     <div class="card-body">
       <h2 class="h5">Acta de compromiso</h2>
-      <p class="text-muted mb-3">Descarga el acta personalizada con tus datos institucionales y luego sube el PDF firmado.</p>
+      <p class="text-muted mb-3">Descarga el acta personalizada con tus datos institucionales y luego sube el PDF
+        firmado.</p>
       <a class="btn btn-outline-primary btn-icon mb-3" href="{{ result.compromise_act_url }}" download>
         <span aria-hidden="true">PDF</span>
         Descargar acta de compromiso
@@ -180,8 +182,9 @@
     <div class="card-body">
       <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-REQ-02 gap-2 mb-3">
         <div class="monitor-record-intro">
-            <h3 class="h5 mb-1">Historial reciente</h3>
-            <p class="text-muted mb-0"><span id="monitor-record-visible-count">{{ result.recent_sessions|length }}</span> sesiones visibles.</p>
+          <h3 class="h5 mb-1">Historial reciente</h3>
+          <p class="text-muted mb-0"><span id="monitor-record-visible-count">{{ result.recent_sessions|length }}</span>
+            sesiones visibles.</p>
           <p class="text-muted mb-0">Resumen de las sesiones más recientes registradas para este monitor.</p>
         </div>
       </div>
@@ -210,92 +213,93 @@
           </thead>
           <tbody>
             {% for session in result.recent_sessions %}
-<tr class="monitor-record-row">
+            <tr class="monitor-record-row">
 
-  <td><strong>{{ session.work_day }}</strong></td>
+              <td><strong>{{ session.work_day }}</strong></td>
 
-  <td>
-    {% if session.actual_start %}
-      {{ session.actual_start|time:"H:i:s" }}
-    {% else %}
-      —
-    {% endif %}
-  </td>
+              <td>
+                {% if session.actual_start %}
+                {{ session.actual_start|time:"H:i:s" }}
+                {% else %}
+                —
+                {% endif %}
+              </td>
 
-  <td>
-    {% if session.actual_end %}
-      {{ session.actual_end|time:"H:i:s" }}
-    {% else %}
-      —
-    {% endif %}
-  </td>
+              <td>
+                {% if session.actual_end %}
+                {{ session.actual_end|time:"H:i:s" }}
+                {% else %}
+                —
+                {% endif %}
+              </td>
 
-  <td>{{ session.normal_minutes|minutes_to_hours }}</td>
+              <td>{{ session.normal_minutes|minutes_to_hours }}</td>
 
-  <td>{{ session.overtime_minutes|minutes_to_hours }}</td>
+              <td>{{ session.overtime_minutes|minutes_to_hours }}</td>
 
-  <!-- AJUSTE -->
-  <td>
-    {% if session.adjustment_minutes > 0 %}
-      <span class="badge text-bg-success">
-        +{{ session.adjustment_minutes|minutes_to_hours }} h
-      </span>
-    {% elif session.adjustment_minutes < 0 %}
-      <span class="badge text-bg-danger">
-        {{ session.adjustment_minutes|minutes_to_hours }} h
-      </span>
-    {% else %}
-      <span class="text-muted">0 h</span>
-    {% endif %}
-  </td>
+              <!-- AJUSTE -->
+              <td>
+                {% if session.adjustment_minutes > 0 %}
+                <span class="badge text-bg-success">
+                  +{{ session.adjustment_minutes|minutes_to_hours }} h
+                </span>
+                {% elif session.adjustment_minutes < 0 %} <span class="badge text-bg-danger">
+                  {{ session.adjustment_minutes|minutes_to_hours }} h
+                  </span>
+                  {% else %}
+                  <span class="text-muted">0 h</span>
+                  {% endif %}
+              </td>
 
-  <!-- RETRASO -->
-  <td>
-    {{ session.late_minutes|minutes_to_hours }}
+              <!-- RETRASO -->
+              <td>
+                {{ session.late_minutes|minutes_to_hours }}
 
-    {% if session.lateness_excused %}
-      <div>
-        <span class="badge text-bg-info mt-1">Exento</span>
-      </div>
-    {% endif %}
-  </td>
+                {% if session.lateness_excused %}
+                <div>
+                  <span class="badge text-bg-info mt-1">Exento</span>
+                </div>
+                {% endif %}
+              </td>
 
-  <!-- ESTADO -->
-  <td>
+              <!-- ESTADO -->
+              <td>
 
-    {% if session.overtime_status == "Aprobado" %}
-      <span class="badge text-bg-success">{{ session.overtime_status }}</span>
+                {% if session.overtime_status == "Aprobada" %}
+                <span class="badge text-bg-success">{{ session.overtime_status }}</span>
 
-    {% elif session.overtime_status == "Pendiente" %}
-      <span class="badge text-bg-warning">{{ session.overtime_status }}</span>
+                {% elif session.overtime_status == "Pendiente" %}
+                <span class="badge text-bg-warning">{{ session.overtime_status }}</span>
 
-    {% elif session.overtime_status == "Rechazado" %}
-      <span class="badge text-bg-danger">{{ session.overtime_status }}</span>
+                {% elif session.overtime_status == "Rechazado" %}
+                <span class="badge text-bg-danger">{{ session.overtime_status }}</span>
 
-    {% elif session.overtime_status == "manual" %}
-      <span class="badge text-bg-primary">Ajuste manual</span>
+                {% elif session.overtime_status == "manual" %}
+                <span class="badge text-bg-primary">Ajuste manual</span>
 
-    {% else %}
-      <span class="badge text-bg-secondary">{{ session.overtime_status }}</span>
-    {% endif %}
+                {% else %}
+                <span class="badge text-bg-secondary">{{ session.overtime_status }}</span>
+                {% endif %}
 
-    {% if session.overtime_auto_approved and session.overtime_exception %}
-      <div class="small text-muted mt-1">
-        Extra: {{ session.overtime_exception.name }}
-      </div>
-    {% endif %}
+                {% if session.overtime_auto_approved and session.overtime_exception %}
+                <div class="small text-muted mt-1">
+                  Extra: {{ session.overtime_exception.name }}
+                </div>
+                {% endif %}
 
-    {% if session.lateness_excused and session.lateness_exception %}
-      <div class="small text-muted mt-1">
-        Retraso: {{ session.lateness_exception.name }}
-      </div>
-    {% endif %}
+                {% if session.lateness_excused and session.lateness_exception %}
+                <div class="small text-muted mt-1">
+                  Retraso: {{ session.lateness_exception.name }}
+                </div>
+                {% endif %}
 
-  </td>
+              </td>
 
-</tr>
+            </tr>
             {% empty %}
-              <tr><td class="text-center text-muted py-4" colspan="8">Sin historial.</td></tr>
+            <tr>
+              <td class="text-center text-muted py-4" colspan="8">Sin historial.</td>
+            </tr>
             {% endfor %}
           </tbody>
         </table>
@@ -306,7 +310,8 @@
         </small>
         <div class="d-inline-flex gap-2">
           <button class="btn btn-sm btn-outline-secondary" id="monitor-record-page-prev" type="button">Anterior</button>
-          <button class="btn btn-sm btn-outline-secondary" id="monitor-record-page-next" type="button">Siguiente</button>
+          <button class="btn btn-sm btn-outline-secondary" id="monitor-record-page-next"
+            type="button">Siguiente</button>
         </div>
       </div>
     </div>

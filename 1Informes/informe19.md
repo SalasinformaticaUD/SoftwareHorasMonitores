@@ -10,14 +10,14 @@ AVANCES:
     - Modulo 3 (Lo que se revisó) completo
     - Modulo 4 completo
     - Modulo 5 por realizar
+- En el archivo .env se modificaron variables como el correo y la contraseña, para que al cargar los monitores no pudiera enviar correos, solo es descomentarlos.
+- En el .env tambien se cambio la direccion de la base de datos, si se quiere ver la base de datos anterior, seria descomentar la monitores, y comentar monitoresv2
 
 FUNCIONA:
 
 
 NO FUNCIONA:
 
-- En el archivo .env se modificaron variables como el correo y la contraseña, para que al cargar los monitores no pudiera enviar correos, solo es descomentarlos.
-- En el .env tambien se cambio la direccion de la base de datos, si se quiere ver la base de datos anterior, seria descomentar la monitores, y comentar monitoresv2
 
 NO MODIFICAR:
 
@@ -26,4 +26,11 @@ NO MODIFICAR:
 
 SIGUIENTE PASO:
 
-- Realizar pruebas cargando todos los datos crudos.
+- Correcciones de la revision de los modulos
+    - Dentro del modulo de monitores, poner en negrilla los campos necesarios para la carga masiva, especificar las opciones validas para proyecto curricular y department, lo mismo para el modulo de horarios
+    - Dentro del modulo de memorando cambiar el nombre de Jaime por Edilberto Suárez Torres
+    - Al tercer memorando enviar correo sobre acercarse al almacen para revisar
+    - Agregar en la linea del tiempo el color de no aplica horas extra junto con los demas
+    - Eliminar la inconsistencia del historial al crear la anotacion
+    - Mejorar visualmente el apartado de inconsistencias eliminando dia anterior y dia despues
+    - Poner modales de alerta al realizar acciones, ejemplo, al crear una anotacion, o al importar los registros, a todas esas acciones añadir modales

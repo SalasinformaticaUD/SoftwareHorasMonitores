@@ -70,8 +70,7 @@
       <h2 class="h5">{{ result.monitor.full_name }}</h2>
       <p class="mb-1">Codigo: {{ result.monitor.codigo_estudiante }}</p>
       <p class="mb-1">Documento: {{ result.monitor.numero_documento|default:"Pendiente" }}</p>
-      <p class="mb-1">Proyecto curricular: {% if result.monitor.proyecto_curricular %}{{
-        result.monitor.get_proyecto_curricular_display }}{% else %}Pendiente{% endif %}</p>
+      <p class="mb-1">Proyecto curricular: {{ result.proyecto|default:"Pendiente" }}</p>
       <p class="mb-1">Telefono: {{ result.monitor.telefono|default:"Pendiente" }}</p>
       <p class="mb-0">Dependencia: {{ result.monitor.get_department_display }}</p>
     </div>

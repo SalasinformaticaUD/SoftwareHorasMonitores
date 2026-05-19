@@ -478,11 +478,13 @@ class MonitorSelfHoursView(MonitorRequiredMixin, TemplateView):
         """
         context = super().get_context_data(**kwargs)
         monitor = getattr(self.request.user, "monitor_profile", None)
+        proyecto = monitor.get_proyecto_curricular_display() if monitor and monitor.proyecto_curricular else None
         context["result"] = monitor_lookup_result(monitor=monitor) if monitor else None
         if context["result"]:
             context["result"]["año"] = datetime.now().year # Agregar año actual al resultado para usar en la plantilla
             context["result"]["monitor_name"] = monitor.full_name.replace(" ", "_")  # Agregar nombre completo del monitor al resultado para usar en la plantilla
             context["result"]["compromise_act_url"] = reverse("monitor-commitment-act-pdf")
+            context["result"]["proyecto"] = proyecto
         context.update(
             {
                 "upload_form": kwargs.get("upload_form") or MonitorActaCompromisoUploadForm(),

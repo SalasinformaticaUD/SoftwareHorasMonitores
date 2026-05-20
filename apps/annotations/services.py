@@ -5,6 +5,9 @@ from apps.annotations.models import Annotation
 from apps.common.events import DomainEvent, event_bus
 from apps.common.permissions import department_allowed
 
+from apps.attendance.models import AttendanceInconsistency
+from apps.common.choices import AttendanceInconsistencyStatusChoices
+
 
 def create_annotation(
     *,
@@ -79,4 +82,25 @@ def update_annotation(
 def delete_annotation(*, actor, annotation: Annotation) -> None:
     if not department_allowed(actor, annotation.department):
         raise ValidationError("No puedes eliminar anotaciones de otra dependencia.")
+
+    linked_inconsistency = AttendanceInconsistency.objects.filter(
+        solution_annotation=annotation
+    ).first()
+
+    if linked_inconsistency:
+        linked_inconsistency.status = AttendanceInconsistencyStatusChoices.PENDING
+        linked_inconsistency.validated_at = None
+        linked_inconsistency.validated_by = None
+        linked_inconsistency.resolution_note = ""
+        linked_inconsistency.solution_annotation = None
+        linked_inconsistency.save(
+            update_fields=[
+                "status",
+                "resolution_note",
+                "validated_at",
+                "validated_by",
+                "solution_annotation",
+            ]
+        )
+
     annotation.delete()

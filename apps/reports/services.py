@@ -522,7 +522,7 @@ def generate_lateness_memorandum_pdf(*, monitor, late_count: int) -> bytes:
  
     meta_rows = [
         _meta_row("DE:", "COORDINADOR DE LABORATORIOS-FACULTAD DE INGENIERÍA"),
-        [Paragraph("", normal), Paragraph("Ing. JAIME ANTONIO BENITEZ FORERO", bold_label)],
+        [Paragraph("", normal), Paragraph("Ing. EDILBERTO SUÁREZ TORRES", bold_label)],
         _meta_row("PARA:", f"{escape(monitor.full_name)} - <b>Código: {escape(monitor.codigo_estudiante)}</b>"),
         [Paragraph("", normal), Paragraph(f"Monitor – {escape(monitor.get_department_display())}", normal)],
         _meta_row("ASUNTO:", "LLAMADO DE ATENCIÓN"),
@@ -543,14 +543,36 @@ def generate_lateness_memorandum_pdf(*, monitor, late_count: int) -> bytes:
     story.append(HRFlowable(width="100%", thickness=0.5, color=colors.black))
     story.append(Spacer(1, 10))
  
-    story.append(Paragraph(
+    if memorandum_number == 1:
+        story.append(Paragraph(
         "Por medio del presente se le hace el primer llamado de atención debido al "
         "incumplimiento en algunas tareas asignadas, recuerde que la puntualidad y "
         "cumplimiento de cada una de estas hacen parte de su compromiso como monitor "
         "que es brindar una atención eficaz a docentes y estudiantes del Laboratorio "
         "de la Facultad de Ingeniería.",
-        justified,
-    ))
+        justified,)
+        )
+    elif memorandum_number == 2:
+        story.append(Paragraph(
+        "Por medio del presente se le hace el segundo llamado de atención debido al "
+        "incumplimiento en algunas tareas asignadas, recuerde que la puntualidad y "
+        "cumplimiento de cada una de estas hacen parte de su compromiso como monitor "
+        "que es brindar una atención eficaz a docentes y estudiantes del Laboratorio "
+        "de la Facultad de Ingeniería.",
+        justified,)
+        )
+    else:
+        story.append(Paragraph(
+        "Por medio del presente se le hace el tercer llamado de atención debido al "
+        "incumplimiento en algunas tareas asignadas, en este momento debe acercarse al almac{en para resolver la situacion, "
+        "recuerde que la puntualidad y "
+        "cumplimiento de cada una de estas hacen parte de su compromiso como monitor "
+        "que es brindar una atención eficaz a docentes y estudiantes del Laboratorio "
+        "de la Facultad de Ingeniería.",
+        justified,)
+        )
+
+
     story.append(Spacer(1, 8))
     story.append(Paragraph(
         "A continuación, relaciono las fechas de sus retardos, inasistencias y/o "
@@ -571,7 +593,7 @@ def generate_lateness_memorandum_pdf(*, monitor, late_count: int) -> bytes:
     story.append(Paragraph("Cordialmente,", normal))
     story.append(Spacer(1, 36))
  
-    story.append(Paragraph("<b>ING. JAIME ANTONIO BENITEZ FORERO</b>", normal))
+    story.append(Paragraph("<b>ING. EDILBERTO SUÁREZ TORRES</b>", normal))
     story.append(Paragraph("Coordinador Laboratorios", normal))
     story.append(Paragraph("Facultad de Ingeniería", normal))
     story.append(Spacer(1, 14))

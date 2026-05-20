@@ -11,6 +11,23 @@
         <div class="alert alert-info small" role="alert">
           Los lideres solo pueden subir registros de su propia dependencia, segun la columna <strong>Departamento</strong> del archivo.
         </div>
+        <p class="text-muted small mb-3">
+            <strong>Columnas esperadas:</strong> <br>
+            <p class="small mb-3" style="color: var(--ud-red-deep);">
+              Departamento <br>
+              Nro. Usuario<br>
+              ID de usuario	<br>
+              Nombre	<br>
+              Fecha inicio	<br>
+              Fecha fin	<br>
+              Descripción de la excepción	<br>
+              Tiempo trabajado	<br>
+              Días de trabajo	<br>
+              Tiempo de trabajo	<br>
+              Observaciones
+            </p>
+          </p>
+
         <form method="post" enctype="multipart/form-data">
           {% csrf_token %}
           {{ form.as_p }}

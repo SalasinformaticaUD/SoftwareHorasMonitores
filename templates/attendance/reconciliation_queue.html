@@ -86,7 +86,7 @@
         </thead>
         <tbody>
           {% for record in records %}
-            <tr
+            <tr class="border-bottom border-2 border-secondary"
               data-date="{{ record.work_day|date:'Y-m-d' }}"
               data-department="{{ record.raw_department }}"
               data-name="{{ record.raw_full_name }}"

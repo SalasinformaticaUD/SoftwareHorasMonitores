@@ -1,4 +1,4 @@
-FECHA: 16/05/2026
+FECHA: 19/05/2026
 TURNO: 6 am - 10 am,
 MONITOR: David Felipe Ariza Ariza
 
@@ -27,10 +27,12 @@ NO MODIFICAR:
 SIGUIENTE PASO:
 
 - Correcciones de la revision de los modulos
-    - Dentro del modulo de monitores, poner en negrilla los campos necesarios para la carga masiva, especificar las opciones validas para proyecto curricular y department, lo mismo para el modulo de horarios
-    - Dentro del modulo de memorando cambiar el nombre de Jaime por Edilberto Suárez Torres
-    - Al tercer memorando enviar correo sobre acercarse al almacen para revisar
-    - Agregar en la linea del tiempo el color de no aplica horas extra junto con los demas
-    - Eliminar la inconsistencia del historial al crear la anotacion
-    - Mejorar visualmente el apartado de inconsistencias eliminando dia anterior y dia despues
+    - Dentro del modulo de monitores, poner en negrilla los campos necesarios para la carga masiva, especificar las opciones validas para proyecto curricular y department, lo mismo para el modulo de horarios CHECK
+    - Dentro del modulo de memorando cambiar el nombre de Jaime por Edilberto Suárez Torres CHECK
+    - Al tercer memorando enviar correo sobre acercarse al almacen para revisar CHECK, revisar texto
+    - Agregar en la linea del tiempo el color de no aplica horas extra junto con los demas CHECK
+    - Mejorar visualmente el apartado de inconsistencias eliminando dia anterior y dia despues CHECK
+    - Eliminar la inconsistencia del historial al crear la anotacion CHECK al invalidar la inconsistencia se crea una anotacion automaticamente de 0 horas, y al crear la anotacion manual se elimina del historial la inconsistencia, se añadió un buscador en las anotaciones para filtrar por monitor, tipo y accion
     - Poner modales de alerta al realizar acciones, ejemplo, al crear una anotacion, o al importar los registros, a todas esas acciones añadir modales
+
+- Investigar requisitos de implementacion del modulo 5

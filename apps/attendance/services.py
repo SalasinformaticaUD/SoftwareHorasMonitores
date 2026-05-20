@@ -614,7 +614,7 @@ def link_annotation_to_inconsistency(*, inconsistency: AttendanceInconsistency, 
     if inconsistency.monitor_id and annotation.monitor_id != inconsistency.monitor_id:
         raise ValidationError("La anotacion no corresponde al monitor de la inconsistencia.")
     inconsistency.solution_annotation = annotation
-    inconsistency.status = AttendanceInconsistencyStatusChoices.VALIDATED
+    inconsistency.status = AttendanceInconsistencyStatusChoices.RESOLVED
     inconsistency.validated_by = actor
     inconsistency.validated_at = timezone.now()
     inconsistency.resolution_note = "Solucion propuesta mediante anotacion administrativa."

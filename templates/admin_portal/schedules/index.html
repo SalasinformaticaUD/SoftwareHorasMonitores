@@ -184,7 +184,26 @@
       <div class="card admin-card">
         <div class="card-body">
           <h2 class="h5 mb-1">Carga masiva</h2>
-          <p class="text-muted small mb-3">Columnas esperadas: email_monitor, day, start_time, end_time, location. Opcionales: asignatura, grupo, docente, proyecto_curricular.</p>
+          <p class="text-muted small mb-3">
+            <strong>Columnas esperadas:</strong> <br>
+            <p class="small mb-3" style="color: var(--ud-red-deep);">
+              email_monitor<br>
+              day <b>(Lunes, Martes, Miércoles, Jueves, Viernes, Sábado)</b><br>
+              start_time <b>(Formato 24 hrs: 06:00:00 a 22:00:00)</b><br>
+              end_time <b>(Formato 24 hrs: 06:00:00 a 22:00:00)</b><br>
+              location <br>
+            </p>
+            <p class="text-muted small mb-3">   
+              <strong>Opcionales:</strong><br>
+            </p>
+            <p class="small mb-3" style="color: var(--ud-red-deep);">
+                asignatura<br>
+                grupo<br>
+                docente<br>
+                proyecto_curricular <b>(ingenieria_electronica, ingenieria_sistemas, ingenieria_electrica, ingenieria_industrial, ingenieria_catastral)</b><br>
+                telefono 
+            </p>
+          </p>
           <form method="post" enctype="multipart/form-data" novalidate>
             {% csrf_token %}
             <input type="hidden" name="action" value="upload">

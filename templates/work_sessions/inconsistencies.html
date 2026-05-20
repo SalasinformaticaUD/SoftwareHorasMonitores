@@ -83,12 +83,9 @@
                       <input type="hidden" name="action" value="invalidate_inconsistent_raw">
                       <input type="hidden" name="inconsistency_id" value="{{ inconsistency.id }}">
                       <input class="form-control form-control-sm" name="reason" placeholder="Motivo de invalidacion">
-                      <button class="btn btn-sm btn-outline-danger" type="submit" {% if not inconsistency.solution_annotation %}disabled{% endif %}>
+                      <button class="btn btn-sm btn-outline-danger" type="submit">
                         Invalidar registro
                       </button>
-                      {% if not inconsistency.solution_annotation %}
-                        <div class="form-text">Primero registra la anotacion de solucion.</div>
-                      {% endif %}
                     </form>
                   </div>
                 </td>
@@ -98,7 +95,61 @@
                   <div class="border rounded p-3 bg-light">
                     <div class="small fw-semibold mb-2">Marcaciones y horarios cercanos</div>
                     <div class="row g-3">
-                      {% for day_context in row.marking_context %}
+                      {% with day_context=row.marking_context %}
+                        <div class="col-lg-4">
+                          <div class="border rounded bg-white p-2 h-100">
+                            <div class="d-flex justify-content-between gap-2 mb-2">
+                              <strong class="small">{{ day_context.label }}</strong>
+                              <span class="small text-muted">{{ day_context.day|date:"Y-m-d" }}</span>
+                            </div>
+
+                            <div class="small mb-2">
+                              <div class="text-muted">Horario</div>
+
+                              {% for schedule in day_context.schedules %}
+                                <div>
+                                  {{ schedule.start_time|time:"H:i" }} - {{ schedule.end_time|time:"H:i" }}
+                                  {% if schedule.location %}
+                                    <span class="text-muted"> · {{ schedule.location }}</span>
+                                  {% endif %}
+                                </div>
+                              {% empty %}
+                                <div class="text-muted">Sin horario activo</div>
+                              {% endfor %}
+                            </div>
+
+                            <div class="small">
+                              <div class="text-muted">Marcaciones</div>
+
+                              {% for record in day_context.records %}
+                                <div class="d-flex justify-content-between gap-2 border-top py-1">
+                                  <span>
+                                    {{ record.event_at|date:"H:i:s" }}
+
+                                    {% if record.id == inconsistency.raw_record_id %}
+                                      <span class="badge text-bg-warning">Error</span>
+                                    {% endif %}
+                                  </span>
+
+                                  <span class="text-muted text-end">
+                                    {{ record.get_pairing_status_display }}
+
+                                    {% if record.paired_record_id %}
+                                      <br>Par: {{ record.paired_record.event_at|date:"H:i:s" }}
+                                    {% elif record.duplicate_of_id %}
+                                      <br>Duplica: {{ record.duplicate_of.event_at|date:"H:i:s" }}
+                                    {% endif %}
+                                  </span>
+                                </div>
+                              {% empty %}
+                                <div class="text-muted">Sin marcaciones</div>
+                              {% endfor %}
+                            </div>
+                          </div>
+                        </div>
+                      {% endwith %}
+                      
+                      <!-- {% for day_context in row.marking_context %}
                         <div class="col-lg-4">
                           <div class="border rounded bg-white p-2 h-100">
                             <div class="d-flex justify-content-between gap-2 mb-2">
@@ -141,7 +192,7 @@
                             </div>
                           </div>
                         </div>
-                      {% endfor %}
+                      {% endfor %} -->
                     </div>
                   </div>
                 </td>

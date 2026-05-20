@@ -120,6 +120,45 @@
           <span class="badge text-bg-light"><span id="annotation-visible-count">{{ recent_annotations|length }}</span> registros</span>
         </div>
 
+        <div class="card shadow-sm mb-4">
+          <div class="card-body">
+            <div class="row g-3 align-items-end">
+              <div class="col-md-6">
+                <label class="form-label" for="annotation-search">Buscar monitor</label>
+                <input
+                  class="form-control"
+                  id="annotation-search"
+                  type="search"
+                  placeholder="Nombre o código del monitor"
+                >
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label" for="annotation-type-filter">Tipo</label>
+                <select class="form-select" id="annotation-type-filter">
+
+                  <option value="">Todos</option>
+                  <option value="Olvido de registro">Olvido de registro</option>
+                  <option value=">Horas virtuales">Horas virtuales</option>
+                  <option value="Permiso">Permiso</option>
+                  <option value="Novedad">Novedad</option>
+                </select>
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label" for="annotation-action-filter">Acción</label>
+                <select class="form-select" id="annotation-action-filter">
+                  <option value="">Todas</option>
+                  <option value="Agregar">Agregar</option>
+                  <option value="Descontar">Descontar</option>
+                  <option value="Solo anotar">Solo anotar</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+
         <div class="table-responsive">
           <table class="table table-sm annotation-table" id="annotations-table">
             <thead>
@@ -136,7 +175,7 @@
             </thead>
             <tbody>
               {% for annotation in recent_annotations %}
-                <tr class="annotation-row">
+                <tr class="border-bottom border-2 border-secondary annotation-row">
                   <td>{{ annotation.occurred_on }}</td>
                   <td>
                     <strong>{{ annotation.monitor.full_name }}</strong>
@@ -196,7 +235,7 @@
     </div>
   </div>
 </div>
-<script>
+<!-- <script>
   document.addEventListener("DOMContentLoaded", function () {
     var rows = Array.from(document.querySelectorAll("#annotations-table .annotation-row"));
     var visibleCount = document.getElementById("annotation-visible-count");
@@ -233,6 +272,86 @@
     });
 
     renderPage(1);
+  });
+</script> -->
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    var rows = Array.from(document.querySelectorAll("#annotations-table .annotation-row"));
+
+    var visibleCount = document.getElementById("annotation-visible-count");
+    var currentLabel = document.getElementById("annotation-page-current");
+    var totalLabel = document.getElementById("annotation-page-total");
+
+    var prevButton = document.getElementById("annotation-page-prev");
+    var nextButton = document.getElementById("annotation-page-next");
+
+    var searchInput = document.getElementById("annotation-search");
+    var typeFilter = document.getElementById("annotation-type-filter");
+    var actionFilter = document.getElementById("annotation-action-filter");
+
+    var pageSize = 10;
+    var currentPage = 1;
+    var filteredRows = [...rows];
+
+    function filterRows() {
+      var search = searchInput.value.toLowerCase().trim();
+      var type = typeFilter.value.toLowerCase();
+      var action = actionFilter.value.toLowerCase();
+
+      filteredRows = rows.filter(function (row) {
+        var monitorText = row.children[1].innerText.toLowerCase();
+        var typeText = row.children[2].innerText.toLowerCase();
+        var actionText = row.children[3].innerText.toLowerCase();
+
+        var matchesSearch = monitorText.includes(search);
+        var matchesType = !type || typeText.includes(type);
+        var matchesAction = !action || actionText.includes(action);
+
+        return matchesSearch && matchesType && matchesAction;
+      });
+
+      renderPage(1);
+    }
+
+    function renderPage(page) {
+      var totalPages = Math.max(Math.ceil(filteredRows.length / pageSize), 1);
+
+      currentPage = Math.min(Math.max(page, 1), totalPages);
+
+      rows.forEach(function (row) {
+        row.classList.add("d-none");
+      });
+
+      var start = (currentPage - 1) * pageSize;
+      var end = start + pageSize;
+
+      filteredRows.forEach(function (row, index) {
+        if (index >= start && index < end) {
+          row.classList.remove("d-none");
+        }
+      });
+
+      visibleCount.textContent = filteredRows.length;
+      currentLabel.textContent = currentPage;
+      totalLabel.textContent = totalPages;
+
+      prevButton.disabled = currentPage <= 1;
+      nextButton.disabled = currentPage >= totalPages;
+    }
+
+    prevButton.addEventListener("click", function () {
+      renderPage(currentPage - 1);
+    });
+
+    nextButton.addEventListener("click", function () {
+      renderPage(currentPage + 1);
+    });
+
+    searchInput.addEventListener("input", filterRows);
+    typeFilter.addEventListener("change", filterRows);
+    actionFilter.addEventListener("change", filterRows);
+
+    filterRows();
   });
 </script>
 {% endblock %}

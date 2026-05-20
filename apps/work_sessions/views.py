@@ -6,6 +6,7 @@ from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect
 from django.views.generic import TemplateView
 
+from apps.annotations.models import Annotation
 from apps.attendance.models import AttendanceInconsistencyEvent, AttendanceRawRecord
 from apps.attendance.selectors import (
     pending_inconsistencies_for_user,
@@ -14,6 +15,8 @@ from apps.attendance.selectors import (
     visible_raw_records_for_user,
 )
 from apps.common.choices import (
+    AnnotationActionChoices,
+    AnnotationTypeChoices,
     AttendanceInconsistencyActionChoices,
     AttendanceInconsistencyStatusChoices,
     AttendanceInconsistencyTypeChoices,
@@ -29,7 +32,6 @@ from apps.schedules.models import Schedule
 from apps.work_sessions.models import WorkSession
 from apps.work_sessions.selectors import pending_overtime_sessions_for_user
 from apps.work_sessions.services import review_overtime
-
 
 class OvertimeReviewListView(AdminOrLeaderRequiredMixin, TemplateView):
     template_name = "work_sessions/overtime_review.html"
@@ -70,43 +72,73 @@ class InconsistencyManagementView(AdminOrLeaderRequiredMixin, TemplateView):
         if monitor is None:
             return []
 
-        days = [inconsistency.work_day + timedelta(days=offset) for offset in (-1, 0, 1)]
-        records_by_day = {
-            day: list(
-                AttendanceRawRecord.objects.filter(
-                    monitor=monitor,
-                    work_day=day,
-                    event_at__isnull=False,
-                )
-                .select_related("paired_record", "duplicate_of")
-                .order_by("event_at", "created_at")
+        ### MOSTRAR LOS TRES DIAS ###
+        # days = [inconsistency.work_day + timedelta(days=offset) for offset in (-1, 0, 1)]
+        # records_by_day = {
+        #     day: list(
+        #         AttendanceRawRecord.objects.filter(
+        #             monitor=monitor,
+        #             work_day=day,
+        #             event_at__isnull=False,
+        #         )
+        #         .select_related("paired_record", "duplicate_of")
+        #         .order_by("event_at", "created_at")
+        #     )
+        #     for day in days
+        # }
+        # schedules_by_weekday = {
+        #     weekday: list(
+        #         Schedule.objects.filter(
+        #             monitor=monitor,
+        #             weekday=weekday,
+        #             is_active=True,
+        #         ).order_by("start_time", "end_time")
+        #     )
+        #     for weekday in {day.weekday() for day in days}
+        # }
+        # labels = {
+        #     days[0]: "Dia anterior",
+        #     days[1]: "Dia de la inconsistencia",
+        #     days[2]: "Dia siguiente",
+        # }
+        # return [
+        #     {
+        #         "day": day,
+        #         "label": labels[day],
+        #         "records": records_by_day[day],
+        #         "schedules": schedules_by_weekday.get(day.weekday(), []),
+        #     }
+        #     for day in days
+        # ]
+
+        ### MOSTRAR SOLO EL DIA DE LA INCONSISTENCIA ###    
+        day = inconsistency.work_day
+
+        records = list(
+            AttendanceRawRecord.objects.filter(
+                monitor=monitor,
+                work_day=day,
+                event_at__isnull=False,
             )
-            for day in days
+            .select_related("paired_record", "duplicate_of")
+            .order_by("event_at", "created_at")
+        )
+
+        schedules = list(
+            Schedule.objects.filter(
+                monitor=monitor,
+                weekday=day.weekday(),
+                is_active=True,
+            ).order_by("start_time", "end_time")
+        )
+
+        return {
+            "day": day,
+            "label": "Dia de la inconsistencia",
+            "records": records,
+            "schedules": schedules,
         }
-        schedules_by_weekday = {
-            weekday: list(
-                Schedule.objects.filter(
-                    monitor=monitor,
-                    weekday=weekday,
-                    is_active=True,
-                ).order_by("start_time", "end_time")
-            )
-            for weekday in {day.weekday() for day in days}
-        }
-        labels = {
-            days[0]: "Dia anterior",
-            days[1]: "Dia de la inconsistencia",
-            days[2]: "Dia siguiente",
-        }
-        return [
-            {
-                "day": day,
-                "label": labels[day],
-                "records": records_by_day[day],
-                "schedules": schedules_by_weekday.get(day.weekday(), []),
-            }
-            for day in days
-        ]
+
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -176,13 +208,33 @@ class InconsistencyManagementView(AdminOrLeaderRequiredMixin, TemplateView):
 
         if action == "invalidate_inconsistent_raw":
             inconsistency = self._visible_inconsistency(request.POST.get("inconsistency_id"))
+            # monitor = get_object_or_404(visible_monitors_for_user(request.user), pk=request.POST.get("monitor_id"), is_active=True)
             try:
+                annotation = Annotation.objects.create(
+                    leader=request.user,
+                    monitor=inconsistency.monitor,
+                    department=inconsistency.monitor.department,
+                    annotation_type=AnnotationTypeChoices.MISSING_PUNCH,
+                    description=(
+                        "Inconsistencia invalidada. "
+                        "No se contabilizan horas para este registro."
+                    ),
+                    action=AnnotationActionChoices.NOTE,
+                    delta_minutes=0,
+                    occurred_on=inconsistency.work_day,
+                )
+                inconsistency.solution_annotation = annotation
+                inconsistency.save(update_fields=["solution_annotation"])
+                print(inconsistency.solution_annotation)
+                messages.success(
+                    request,
+                    "Registro inconsistente invalidado y anotación de 0 horas creada."
+                )
                 invalidate_inconsistent_raw_record(
                     inconsistency=inconsistency,
                     actor=request.user,
                     reason=request.POST.get("reason", ""),
                 )
-                messages.success(request, "Registro inconsistente invalidado.")
             except ValidationError as exc:
                 messages.error(request, "; ".join(exc.messages))
             return redirect("inconsistencies-manage")

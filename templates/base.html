@@ -97,11 +97,64 @@
 
     <main class="container site-main">
       {% if messages %}
-        {% for message in messages %}
+        <!-- {% for message in messages %}
           <div class="alert alert-{{ message.tags|default:'info' }}">{{ message }}</div>
-        {% endfor %}
+        {% endfor %} -->
+      <!-- Modal -->
+        <script>
+          document.addEventListener("DOMContentLoaded", function () {
+            const modalEl = document.getElementById('systemMessageModal');
+            const modal = new bootstrap.Modal(modalEl);
+
+            const header = document.getElementById("systemMessageHeader");
+            const body = document.getElementById("systemMessageBody");
+            const title = document.getElementById("systemMessageTitle");
+            const icon = document.getElementById("systemMessageIcon");
+
+            let html = "";
+            let type = "info";
+
+            {% for message in messages %}
+              html += "<div>{{ message|escapejs }}</div>";
+              type = "{{ message.tags }}";
+            {% endfor %}
+
+            body.innerHTML = html;
+
+            // estilos por tipo
+            const styles = {
+              success: {
+                bg: "bg-success",
+                icon: "✔️",
+                title: "Éxito"
+              },
+              error: {
+                bg: "bg-danger",
+                icon: "❌",
+                title: "Error"
+              },
+              warning: {
+                bg: "bg-warning text-dark",
+                icon: "⚠️",
+                title: "Advertencia"
+              },
+              info: {
+                bg: "bg-primary",
+                icon: "ℹ️",
+                title: "Información"
+              }
+            };
+
+            const cfg = styles[type] || styles.info;
+
+            header.className = "modal-header text-white " + cfg.bg;
+            title.innerHTML = cfg.icon + " <span>" + cfg.title + "</span>";
+
+            modal.show();
+          });
+        </script>
       {% endif %}
-      {% block content %}{% endblock %}
+    {% block content %}{% endblock %}
     </main>
 
     <footer class="site-footer">
@@ -110,6 +163,23 @@
       </div>
     </footer>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <div class="modal fade" id="systemMessageModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+
+          <div class="modal-header text-white" id="systemMessageHeader">
+            <h5 class="modal-title d-flex align-items-center gap-2" id="systemMessageTitle">
+              <span id="systemMessageIcon"></span>
+              <span>Mensaje</span>
+            </h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+          </div>
+
+          <div class="modal-body" id="systemMessageBody"></div>
+
+        </div>
+      </div>
+    </div>
   </body>
 </html>
 

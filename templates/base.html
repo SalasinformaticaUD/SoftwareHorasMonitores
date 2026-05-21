@@ -96,66 +96,69 @@
     </header>
 
     <main class="container site-main">
-      {% if messages %}
-        <!-- {% for message in messages %}
-          <div class="alert alert-{{ message.tags|default:'info' }}">{{ message }}</div>
-        {% endfor %} -->
-      <!-- Modal -->
-        <script>
-          document.addEventListener("DOMContentLoaded", function () {
-            const modalEl = document.getElementById('systemMessageModal');
-            const modal = new bootstrap.Modal(modalEl);
+  {% if messages %}
+    <!-- Pasamos los mensajes de Django a un JSON seguro en JS -->
+    <script id="django-messages" type="application/json">
+      [
+        {% for message in messages %}
+          {
+            "text": "{{ message|escapejs }}",
+            "tags": "{{ message.tags|default:'info' }}"
+          }{% if not forloop.last %},{% endif %}
+        {% endfor %}
+      ]
+    </script>
 
-            const header = document.getElementById("systemMessageHeader");
-            const body = document.getElementById("systemMessageBody");
-            const title = document.getElementById("systemMessageTitle");
-            const icon = document.getElementById("systemMessageIcon");
+    <script>
+      document.addEventListener("DOMContentLoaded", function () {
+        const modalEl = document.getElementById('systemMessageModal');
+        if (!modalEl) return; // Evita errores si el modal no existe en el HTML
 
-            let html = "";
-            let type = "info";
+        const modal = new bootstrap.Modal(modalEl);
+        const header = document.getElementById("systemMessageHeader");
+        const body = document.getElementById("systemMessageBody");
+        const title = document.getElementById("systemMessageTitle");
 
-            {% for message in messages %}
-              html += "<div>{{ message|escapejs }}</div>";
-              type = "{{ message.tags }}";
-            {% endfor %}
+        // Leer los mensajes de forma segura
+        const messages = JSON.parse(document.getElementById('django-messages').textContent);
+        
+        let html = "";
+        // Tomamos el tipo del primer mensaje para el estilo del modal
+        let type = messages[0]?.tags || "info"; 
 
-            body.innerHTML = html;
+        // Si Django devuelve múltiples tags (ej. "error safe"), tomamos solo el primero
+        if (type.includes(" ")) {
+          type = type.split(" ")[0];
+        }
 
-            // estilos por tipo
-            const styles = {
-              success: {
-                bg: "bg-success",
-                icon: "✔️",
-                title: "Éxito"
-              },
-              error: {
-                bg: "bg-danger",
-                icon: "❌",
-                title: "Error"
-              },
-              warning: {
-                bg: "bg-warning text-dark",
-                icon: "⚠️",
-                title: "Advertencia"
-              },
-              info: {
-                bg: "bg-primary",
-                icon: "ℹ️",
-                title: "Información"
-              }
-            };
+        messages.forEach(msg => {
+          html += `<div>${msg.text}</div>`;
+        });
 
-            const cfg = styles[type] || styles.info;
+        body.innerHTML = html;
 
-            header.className = "modal-header text-white " + cfg.bg;
-            title.innerHTML = cfg.icon + " <span>" + cfg.title + "</span>";
+        // Configuración de estilos
+        const styles = {
+          success: { bg: "bg-success", icon: "✔️", title: "Éxito" },
+          error: { bg: "bg-danger", icon: "❌", title: "Error" },
+          danger: { bg: "bg-danger", icon: "❌", title: "Error" }, // Por si usas "danger"
+          warning: { bg: "bg-warning text-dark", icon: "⚠️", title: "Advertencia" },
+          info: { bg: "bg-primary", icon: "ℹ️", title: "Información" }
+        };
 
-            modal.show();
-          });
-        </script>
-      {% endif %}
-    {% block content %}{% endblock %}
-    </main>
+        const cfg = styles[type] || styles.info;
+
+        header.className = "modal-header text-white " + cfg.bg;
+        title.innerHTML = cfg.icon + " <span class='ms-2'>" + cfg.title + "</span>";
+
+        modal.show();
+      });
+    </script>
+  {% endif %}
+
+  {% block content %}{% endblock %}
+</main>
+
 
     <footer class="site-footer">
       <div class="container">

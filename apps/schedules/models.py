@@ -69,7 +69,7 @@ class ScheduleException(BaseModel):
         blank=True,
         null=True,
         db_index=True,
-        help_text="Déjalo vacío para que aplique a todas las dependencias.",
+        
     )
     ignore_lateness = models.BooleanField(
         default=True,

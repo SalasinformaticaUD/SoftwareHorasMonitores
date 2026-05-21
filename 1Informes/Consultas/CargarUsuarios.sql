@@ -14,4 +14,4 @@ COPY users_user (
     updated_at,
     role,
     department
-) FROM 'C:\Users\ud\Downloads\result_export.csv' WITH CSV HEADER;
+) FROM '/app/docker/initial_users.csv' WITH CSV HEADER;

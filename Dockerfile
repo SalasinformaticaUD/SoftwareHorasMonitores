@@ -41,5 +41,6 @@ RUN mkdir -p /app/dropzone /app/media /app/staticfiles \
 
 USER app
 
+COPY docker/initial_users.csv /app/docker/initial_users.csv
 ENTRYPOINT ["/app/docker/entrypoint.sh"]
 CMD ["web"]

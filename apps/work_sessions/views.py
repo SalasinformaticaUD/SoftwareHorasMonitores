@@ -208,8 +208,14 @@ class InconsistencyManagementView(AdminOrLeaderRequiredMixin, TemplateView):
 
         if action == "invalidate_inconsistent_raw":
             inconsistency = self._visible_inconsistency(request.POST.get("inconsistency_id"))
-            # monitor = get_object_or_404(visible_monitors_for_user(request.user), pk=request.POST.get("monitor_id"), is_active=True)
+            
+            reason = (request.POST.get("reason") or "").strip()
+            if not reason:
+                messages.error(request, "Rechazar un registro requiere un motivo.")
+                return redirect("inconsistencies-manage")
+
             try:
+    
                 annotation = Annotation.objects.create(
                     leader=request.user,
                     monitor=inconsistency.monitor,
@@ -225,28 +231,17 @@ class InconsistencyManagementView(AdminOrLeaderRequiredMixin, TemplateView):
                 )
                 inconsistency.solution_annotation = annotation
                 inconsistency.save(update_fields=["solution_annotation"])
-                print(inconsistency.solution_annotation)
+                
+                invalidate_inconsistent_raw_record(
+                    inconsistency=inconsistency,
+                    actor=request.user,
+                    reason=reason,
+                )
+               
                 messages.success(
                     request,
                     "Registro inconsistente invalidado y anotación de 0 horas creada."
                 )
-                invalidate_inconsistent_raw_record(
-                    inconsistency=inconsistency,
-                    actor=request.user,
-                    reason=request.POST.get("reason", ""),
-                )
             except ValidationError as exc:
                 messages.error(request, "; ".join(exc.messages))
             return redirect("inconsistencies-manage")
-
-        if action == "reject_raw":
-            raw_record = self._visible_raw_record(request.POST.get("raw_record_id"))
-            try:
-                reject_raw_record(raw_record=raw_record, actor=request.user, reason=request.POST.get("reason", ""))
-                messages.success(request, "Registro crudo rechazado sin modificar la marcacion original.")
-            except ValidationError as exc:
-                messages.error(request, "; ".join(exc.messages))
-            return redirect("inconsistencies-manage")
-
-        messages.error(request, "Accion no reconocida.")
-        return redirect("inconsistencies-manage")

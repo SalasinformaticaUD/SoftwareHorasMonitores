@@ -141,9 +141,7 @@ class ScheduleExceptionForm(forms.ModelForm):
             self.fields["department"].initial = actor.department
             self.fields["department"].help_text = "Como líder, solo puedes crear excepciones para tu dependencia."
         else:
-            self.fields["department"].help_text = (
-                "Déjalo vacío para que la excepción aplique a todas las dependencias."
-            )
+            self.fields["department"].choices = [("", "Todas las dependencias")] + list(DepartmentChoices.choices)
 
     def clean_department(self):
         department = self.cleaned_data.get("department")

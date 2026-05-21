@@ -48,22 +48,23 @@ case "${1:-web}" in
       python manage.py seed_initial_data
     fi
 
-    
-    echo "Cargando usuarios iniciales..."
-    USER_COUNT=$(python manage.py shell --no-imports -c "from django.contrib.auth import get_user_model; User = get_user_model(); print(User.objects.count())")
+   # 
+   # echo "Cargando usuarios iniciales..."
+   # USER_COUNT=$(python manage.py shell --no-imports -c "from django.contrib.auth import get_user_model; User = get_user_model(); print(User.objects.count())")
 
-    if [ "$USER_COUNT" = "0" ]; then
-        echo "Insertando usuarios por defecto..."
-        python manage.py makemigrations
-        PGPASSWORD=$POSTGRES_PASSWORD psql -h $DB_HOST -U $POSTGRES_USER -d $POSTGRES_DB -c "\copy users_user (
-        password, last_login, is_superuser, username,
-        first_name, last_name, email, is_staff, is_active,
-        date_joined, id, created_at, updated_at, role, department
-        ) FROM '/app/docker/initial_users.csv' WITH CSV HEADER NULL 'NULL';"
-        echo "Usuarios cargados OK"
-    else
-        echo "Ya existen $USER_COUNT usuarios, omitiendo carga inicial."
-    fi
+   # if [ "$USER_COUNT" = "0" ]; then
+   #     echo "Insertando usuarios por defecto..."
+   #     python manage.py makemigrations
+   #     python manage.py migrate
+   #     PGPASSWORD=$POSTGRES_PASSWORD psql -h $DB_HOST -U $POSTGRES_USER -d $POSTGRES_DB -c "\copy users_user (
+   #     password, last_login, is_superuser, username,
+   #     first_name, last_name, email, is_staff, is_active,
+   #     date_joined, id, created_at, updated_at, role, department
+   #     ) FROM '/app/docker/initial_users.csv' WITH CSV HEADER NULL 'NULL';"
+   #     echo "Usuarios cargados OK"
+   # else
+   #     echo "Ya existen $USER_COUNT usuarios, omitiendo carga inicial."
+   # fi
 
 
 

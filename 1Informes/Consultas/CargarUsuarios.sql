@@ -14,4 +14,7 @@ COPY users_user (
     updated_at,
     role,
     department
-) FROM '/app/docker/initial_users.csv' WITH CSV HEADER;
+) FROM '/initial_users.csv' WITH CSV HEADER;
+
+
+SELECT * FROM users_user

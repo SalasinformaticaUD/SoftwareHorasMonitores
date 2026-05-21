@@ -35,7 +35,10 @@ services:
       start_period: 30s
 
   db:
-    image: postgres:16-alpine
+    build:
+      context: ./docker/db
+      dockerfile: Dockerfile
+    image: monitores-db:16
     ports:
       - "5436:5432"
     restart: unless-stopped

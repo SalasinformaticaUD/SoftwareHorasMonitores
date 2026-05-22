@@ -8,6 +8,7 @@ templates o respuestas API.
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from datetime import date, time
 from typing import Optional
 
@@ -295,8 +296,15 @@ def _build_session_timeline(session) -> dict:
         status_kind = "inconsistency"
         status_label = "Retardo"
 
+    schedule_label = "Sin horario asignado"
+    if session.schedule:
+        schedule_label = f"{session.schedule.start_time:%H:%M} - {session.schedule.end_time:%H:%M}"
+
     return {
         "session": session,
+        "title": session.monitor.full_name,
+        "subtitle": schedule_label,
+        "work_day": session.work_day,
         "status_label": status_label,
         "status_kind": status_kind,
         "worked_minutes": session.normal_minutes + session.overtime_minutes,
@@ -319,6 +327,108 @@ def build_session_timeline_rows(sessions) -> list[dict]:
         list[dict]: Lista de estructuras listas para el template del timeline.
     """
     return [_build_session_timeline(session) for session in sessions]
+
+
+def _status_rank(status_kind: str) -> int:
+    ranks = {
+        "inconsistency": 4,
+        "overtime-pending": 3,
+        "overtime-rejected": 2,
+        "overtime-approved": 1,
+        "ok": 0,
+    }
+    return ranks.get(status_kind, 0)
+
+
+def _build_day_timeline_row(*, work_day: date, sessions: list[WorkSession]) -> dict | None:
+    if not sessions:
+        return None
+
+    ordered_sessions = sorted(sessions, key=lambda session: session.actual_start)
+    schedule_segments = []
+    punch_segments = []
+    markers = []
+    schedule_labels = []
+    worked_minutes = 0
+    status_kind = "ok"
+    status_label = "Sin novedad"
+
+    for session in ordered_sessions:
+        row = _build_session_timeline(session)
+        schedule_segments.extend(row["tracks"][0]["segments"])
+        punch_segments.extend(row["tracks"][1]["segments"])
+        markers.extend(row["markers"])
+        worked_minutes += row["worked_minutes"]
+
+        if session.schedule:
+            label = f"{session.schedule.start_time:%H:%M} - {session.schedule.end_time:%H:%M}"
+        else:
+            label = "Sin horario asignado"
+        if label not in schedule_labels:
+            schedule_labels.append(label)
+
+        if _status_rank(row["status_kind"]) > _status_rank(status_kind):
+            status_kind = row["status_kind"]
+            status_label = row["status_label"]
+
+    markers.sort(key=lambda marker: marker["time"])
+
+    return {
+        "session": ordered_sessions[0],
+        "title": ordered_sessions[0].monitor.full_name,
+        "subtitle": "; ".join(schedule_labels),
+        "work_day": work_day,
+        "status_label": status_label,
+        "status_kind": status_kind,
+        "worked_minutes": worked_minutes,
+        "tracks": [
+            {"label": "Nivel 1: Horario Asignado", "segments": schedule_segments},
+            {"label": "Nivel 2: Clasificacion de Horas", "segments": punch_segments},
+            {"label": "Nivel 3: Registros de Huella", "segments": []},
+        ],
+        "markers": markers,
+    }
+
+
+def build_day_timeline_rows(sessions) -> list[dict]:
+    groups = OrderedDict()
+    for session in sessions:
+        groups.setdefault(session.work_day, []).append(session)
+    return [
+        row
+        for work_day, grouped_sessions in groups.items()
+        if (row := _build_day_timeline_row(work_day=work_day, sessions=grouped_sessions)) is not None
+    ]
+
+
+def _build_monitor_day_groups(*, history_rows: list[dict], timeline_rows: list[dict]) -> list[dict]:
+    """Agrupa historial y lineas de tiempo por dia para el detalle del monitor."""
+    groups = OrderedDict()
+    timeline_by_day = {row["work_day"]: row for row in timeline_rows}
+
+    def get_group(work_day):
+        if work_day not in groups:
+            groups[work_day] = {
+                "work_day": work_day,
+                "anchor": f"record-day-{work_day:%Y-%m-%d}",
+                "sessions": [],
+                "timeline_rows": [timeline_by_day[work_day]] if work_day in timeline_by_day else [],
+                "normal_minutes": 0,
+                "overtime_minutes": 0,
+                "adjustment_minutes": 0,
+                "late_minutes": 0,
+            }
+        return groups[work_day]
+
+    for row in history_rows:
+        group = get_group(row["work_day"])
+        group["sessions"].append(row)
+        group["normal_minutes"] += row["normal_minutes"]
+        group["overtime_minutes"] += row["overtime_minutes"]
+        group["adjustment_minutes"] += row["adjustment_minutes"]
+        group["late_minutes"] += row["late_minutes"]
+
+    return list(groups.values())
 
 
 def _base_session_queryset(*, monitor=None, start_date: Optional[date] = None, end_date: Optional[date] = None):
@@ -514,7 +624,7 @@ def monitor_lookup_result(*, monitor):
 
     metrics = aggregate_monitor_metrics(monitor=monitor)
 
-    recent_sessions = (
+    recent_sessions = list(
         WorkSession.objects.filter(monitor=monitor)
         .exclude(session_state=SessionStateChoices.INVALID)
         .select_related(
@@ -606,11 +716,14 @@ def monitor_lookup_result(*, monitor):
         reverse=True,
     )
 
+    timeline_rows = build_day_timeline_rows(recent_sessions)
+
     return {
         "monitor": monitor,
         "metrics": metrics,
         "recent_sessions": history_rows,
-        "timeline_rows": build_session_timeline_rows(recent_sessions),
+        "timeline_rows": timeline_rows,
+        "day_groups": _build_monitor_day_groups(history_rows=history_rows, timeline_rows=timeline_rows),
         "timeline_hours": range(6, 23, 2),
     }
 

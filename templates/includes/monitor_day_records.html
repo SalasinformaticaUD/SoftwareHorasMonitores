@@ -1,0 +1,291 @@
+{% load common_extras %}
+<style>
+  .lookup-history-table thead th {
+    white-space: nowrap;
+    vertical-align: middle;
+  }
+
+  .lookup-history-table tbody td {
+    vertical-align: middle;
+  }
+
+  .lookup-history-help {
+    font-size: 0.82rem;
+    color: #6c757d;
+    line-height: 1.45;
+  }
+
+  .monitor-records-pager {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .records-day-group {
+    border: 1px solid rgba(118, 19, 22, 0.14);
+    border-radius: 0.5rem;
+    background: #ffffff;
+  }
+
+  .records-day-group + .records-day-group {
+    margin-top: 0.75rem;
+  }
+
+  .records-day-summary {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.85rem 1rem;
+    cursor: pointer;
+    list-style: none;
+  }
+
+  .records-day-summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .records-day-date {
+    color: #111111;
+    font-size: 1rem;
+    font-weight: 800;
+  }
+
+  .records-day-action {
+    flex: 0 0 auto;
+  }
+
+  .records-day-body {
+    padding: 0 1rem 1rem;
+  }
+
+  .records-day-divider {
+    margin: 0 0 1rem;
+    border-top: 1px solid rgba(118, 19, 22, 0.12);
+  }
+
+  .records-day-meta {
+    display: flex;
+    gap: 0.55rem;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+  }
+
+  .records-day-meta .badge {
+    font-weight: 600;
+  }
+
+  :root {
+    --bs-secondary-rgb: 118, 19, 22;
+    --text-bg-secondary: 108,117,125;
+  }
+</style>
+
+<div class="card shadow-sm mt-4">
+  <div class="card-body">
+    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-2 mb-3">
+      <div>
+        <h3 class="h5 mb-1">Registros por dia</h3>
+        <p class="text-muted mb-0"><span id="monitor-record-visible-count">{{ result.day_groups|length }}</span> dias con registros.</p>
+      </div>
+    </div>
+
+    <div class="lookup-history-help border rounded bg-light px-3 py-2 mb-3">
+      <strong>Guia rapida:</strong>
+      abre el dia para ver una sola linea multinivel con todas las marcaciones de ese dia.
+    </div>
+
+    <div id="monitor-record-day-list">
+      {% for day_group in result.day_groups %}
+        <details class="records-day-group monitor-record-day" id="{{ day_group.anchor }}" data-work-day="{{ day_group.work_day|date:'Y-m-d' }}">
+          <summary class="records-day-summary">
+            <span class="records-day-date">{{ day_group.work_day|date:"d F" }}</span>
+            <span class="btn btn-sm btn-success records-day-action">Ver registros</span>
+          </summary>
+          <div class="records-day-body">
+            <div class="records-day-divider"></div>
+            <div class="records-day-meta">
+              <span class="badge text-bg-light">{{ day_group.sessions|length }} registros</span>
+              <span class="badge text-bg-light">Normales: {{ day_group.normal_minutes|minutes_to_hours }} h</span>
+              <span class="badge text-bg-light">Extra: {{ day_group.overtime_minutes|minutes_to_hours }} h</span>
+              <span class="badge text-bg-light">Ajuste: {{ day_group.adjustment_minutes|minutes_to_hours }} h</span>
+              <span class="badge text-bg-light">Retraso: {{ day_group.late_minutes|minutes_to_hours }} h</span>
+            </div>
+
+            <h4 class="h6 mb-2">Linea de tiempo multinivel</h4>
+            {% include "includes/session_timeline.html" with timeline_rows=day_group.timeline_rows %}
+
+            <h4 class="h6 mt-4 mb-2">Detalle del dia</h4>
+            <div class="table-responsive">
+              <table class="table table-sm table-hover lookup-history-table">
+                <thead>
+                  <tr class="table-light">
+                    <th>Entrada</th>
+                    <th>Salida</th>
+                    <th>Normales (h)</th>
+                    <th>Extra (h)</th>
+                    <th>Ajuste (h)</th>
+                    <th>Retraso (h)</th>
+                    <th>Estado extra</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for session in day_group.sessions %}
+                    <tr>
+                      <td>
+                        {% if session.actual_start %}
+                          {{ session.actual_start|time:"H:i:s" }}
+                        {% else %}
+                          -
+                        {% endif %}
+                      </td>
+                      <td>
+                        {% if session.actual_end %}
+                          {{ session.actual_end|time:"H:i:s" }}
+                        {% else %}
+                          -
+                        {% endif %}
+                      </td>
+                      <td>{{ session.normal_minutes|minutes_to_hours }}</td>
+                      <td>{{ session.overtime_minutes|minutes_to_hours }}</td>
+                      <td>
+                        {% if session.adjustment_minutes > 0 %}
+                          <span class="badge text-bg-success">+{{ session.adjustment_minutes|minutes_to_hours }} h</span>
+                        {% elif session.adjustment_minutes < 0 %}
+                          <span class="badge text-bg-danger">{{ session.adjustment_minutes|minutes_to_hours }} h</span>
+                        {% else %}
+                          <span class="text-muted">0 h</span>
+                        {% endif %}
+                      </td>
+                      <td>
+                        {{ session.late_minutes|minutes_to_hours }}
+                        {% if session.lateness_excused %}
+                          <div><span class="badge text-bg-info mt-1">Exento</span></div>
+                        {% endif %}
+                      </td>
+                      <td>
+                        {% if session.overtime_status == "Aprobada" %}
+                          <span class="badge text-bg-success">{{ session.overtime_status }}</span>
+                        {% elif session.overtime_status == "Pendiente" %}
+                          <span class="badge text-bg-warning">{{ session.overtime_status }}</span>
+                        {% elif session.overtime_status == "Rechazado" %}
+                          <span class="badge text-bg-danger">{{ session.overtime_status }}</span>
+                        {% elif session.overtime_status == "manual" %}
+                          <span class="badge text-bg-primary">Ajuste manual</span>
+                        {% else %}
+                          <span class="badge text-bg-secondary">{{ session.overtime_status }}</span>
+                        {% endif %}
+
+                        {% if session.overtime_auto_approved and session.overtime_exception %}
+                          <div class="small text-muted mt-1">Extra: {{ session.overtime_exception.name }}</div>
+                        {% endif %}
+
+                        {% if session.lateness_excused and session.lateness_exception %}
+                          <div class="small text-muted mt-1">Retraso: {{ session.lateness_exception.name }}</div>
+                        {% endif %}
+                      </td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </details>
+      {% empty %}
+        <div class="text-center text-muted py-4">Sin historial.</div>
+      {% endfor %}
+    </div>
+
+    <div class="monitor-records-pager mt-3">
+      <small class="text-muted">
+        Pagina <span id="monitor-record-page-current">1</span> de <span id="monitor-record-page-total">1</span>
+      </small>
+      <div class="d-inline-flex gap-2">
+        <button class="btn btn-sm btn-outline-secondary" id="monitor-record-page-prev" type="button">Anterior</button>
+        <button class="btn btn-sm btn-outline-secondary" id="monitor-record-page-next" type="button">Siguiente</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    var groups = Array.from(document.querySelectorAll(".monitor-record-day"));
+    var visibleCount = document.getElementById("monitor-record-visible-count");
+    var currentLabel = document.getElementById("monitor-record-page-current");
+    var totalLabel = document.getElementById("monitor-record-page-total");
+    var prevButton = document.getElementById("monitor-record-page-prev");
+    var nextButton = document.getElementById("monitor-record-page-next");
+    var pageSize = 10;
+    var currentPage = 1;
+
+    if (!visibleCount || !currentLabel || !totalLabel || !prevButton || !nextButton) {
+      return;
+    }
+
+    function renderPage(page) {
+      var totalPages = Math.max(Math.ceil(groups.length / pageSize), 1);
+      currentPage = Math.min(Math.max(page, 1), totalPages);
+      var start = (currentPage - 1) * pageSize;
+      var end = start + pageSize;
+
+      groups.forEach(function (group, index) {
+        group.classList.toggle("d-none", !(index >= start && index < end));
+      });
+
+      visibleCount.textContent = groups.length;
+      currentLabel.textContent = currentPage;
+      totalLabel.textContent = totalPages;
+      prevButton.disabled = currentPage <= 1;
+      nextButton.disabled = currentPage >= totalPages;
+    }
+
+    function linkedDayElement() {
+      var params = new URLSearchParams(window.location.search);
+      var requestedDay = params.get("dia");
+      var hash = window.location.hash ? window.location.hash.substring(1) : "";
+
+      if (hash) {
+        var byHash = document.getElementById(hash);
+        if (byHash) {
+          return byHash;
+        }
+      }
+
+      if (requestedDay) {
+        return document.querySelector('.monitor-record-day[data-work-day="' + requestedDay + '"]');
+      }
+
+      return null;
+    }
+
+    function openLinkedDay() {
+      var target = linkedDayElement();
+      if (!target) {
+        renderPage(1);
+        return;
+      }
+
+      var targetIndex = groups.indexOf(target);
+      if (targetIndex >= 0) {
+        renderPage(Math.floor(targetIndex / pageSize) + 1);
+      }
+      target.open = true;
+      window.setTimeout(function () {
+        target.scrollIntoView({ block: "start" });
+      }, 0);
+    }
+
+    prevButton.addEventListener("click", function () {
+      renderPage(currentPage - 1);
+    });
+
+    nextButton.addEventListener("click", function () {
+      renderPage(currentPage + 1);
+    });
+
+    openLinkedDay();
+  });
+</script>

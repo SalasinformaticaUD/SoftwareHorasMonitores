@@ -1,0 +1,2 @@
+- Que se pueda eliminar toda la base de datos, menos los usuarios administrativos, desde el frontend.
+- Se tiene que quitar del despliegue la parte admin de django.

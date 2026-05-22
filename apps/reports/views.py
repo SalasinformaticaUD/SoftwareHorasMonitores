@@ -67,7 +67,39 @@ class LeaderDashboardView(AdminOrLeaderRequiredMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         context.update(build_dashboard_context(self.request.user))
         context["dashboard_export_directory"] = str(get_dashboard_export_directory())
+        context["lookup_form"] = kwargs.get("lookup_form") or PublicMonitorLookupForm()
+        context["lookup_submitted"] = kwargs.get("lookup_submitted", False)
         return context
+
+    def post(self, request, *args, **kwargs):
+        form = PublicMonitorLookupForm(request.POST)
+
+        if form.is_valid():
+            try:
+                enforce_public_lookup_limit(request)
+            except PermissionDenied as exc:
+                messages.error(request, str(exc))
+                return self.render_to_response(self.get_context_data(lookup_form=form, lookup_submitted=True))
+
+            department = None if request.user.role == UserRoleChoices.ADMIN else request.user.department
+            lookup_result = public_monitor_lookup(
+                codigo_estudiante=form.cleaned_data["codigo_estudiante"],
+                department=department,
+            )
+            if lookup_result:
+                messages.success(request, f"Consulta exitosa para {lookup_result['monitor'].full_name}.")
+                return redirect("dashboard-monitor-records", monitor_id=lookup_result["monitor"].id)
+            else:
+                messages.error(request, "No se encontro un monitor visible con ese codigo.")
+        else:
+            messages.error(request, "Ingresa un codigo de estudiante valido.")
+
+        return self.render_to_response(
+            self.get_context_data(
+                lookup_form=form,
+                lookup_submitted=True,
+            )
+        )
 
 
 class MonitorRecordsDetailView(AdminOrLeaderRequiredMixin, TemplateView):

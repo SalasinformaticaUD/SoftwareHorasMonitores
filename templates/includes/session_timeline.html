@@ -284,10 +284,12 @@
     <article class="attendance-timeline-card border-bottom border-2 border-secondary">
       <div class="attendance-timeline-header">
         <div>
-          <h3 class="attendance-timeline-title">{{ row.session.monitor.full_name }}</h3>
+          <h3 class="attendance-timeline-title">{{ row.title|default:row.session.monitor.full_name }}</h3>
           <p class="attendance-timeline-subtitle">
             Horario asignado:
-            {% if row.session.schedule %}
+            {% if row.subtitle %}
+              {{ row.subtitle }}
+            {% elif row.session.schedule %}
               {{ row.session.schedule.start_time|time:"H:i" }} - {{ row.session.schedule.end_time|time:"H:i" }}
             {% else %}
               Sin horario asignado
@@ -297,7 +299,7 @@
         <div class="text-end">
           <div class="attendance-timeline-meta">
             <span class="attendance-timeline-calendar-icon" aria-hidden="true"></span>
-            <span>{{ row.session.work_day|date:"l, d \\d\\e F \\d\\e Y"|title }}</span>
+            <span>{{ row.work_day|default:row.session.work_day|date:"l, d \\d\\e F \\d\\e Y"|title }}</span>
           </div>
           <div class="attendance-timeline-total">{{ row.worked_minutes|minutes_to_hours }}h trabajadas</div>
         </div>

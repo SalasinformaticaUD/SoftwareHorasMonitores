@@ -73,10 +73,45 @@
   .dashboard-record-intro p + p {
     display: none;
   }
+
+  .dashboard-lookup-form {
+    display: grid;
+    grid-template-columns: minmax(12rem, 1fr) auto;
+    gap: 0.75rem;
+    align-items: end;
+  }
+
+  @media (max-width: 575.98px) {
+    .dashboard-lookup-form {
+      grid-template-columns: 1fr;
+    }
+  }
 </style>
 <h1 class="h3 mb-4">Dashboard de lider</h1>
 <div class="alert alert-secondary small">
   Los Excel por dependencia se generan en: <strong>{{ dashboard_export_directory }}</strong>
+</div>
+
+<div class="card shadow-sm mb-4">
+  <div class="card-body">
+    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-2 mb-3">
+      <div>
+        <h2 class="h5 mb-1">Consulta por codigo</h2>
+        <p class="text-muted mb-0">Consulta las horas y registros por dia de un monitor visible para tu dependencia.</p>
+      </div>
+    </div>
+    <form class="dashboard-lookup-form" method="post">
+      {% csrf_token %}
+      <div>
+        <label class="form-label" for="{{ lookup_form.codigo_estudiante.id_for_label }}">Codigo de estudiante</label>
+        {{ lookup_form.codigo_estudiante }}
+        {% for error in lookup_form.codigo_estudiante.errors %}
+          <div class="text-danger small mt-1">{{ error }}</div>
+        {% endfor %}
+      </div>
+      <button class="btn btn-primary" type="submit">Consultar</button>
+    </form>
+  </div>
 </div>
 
 <div class="card shadow-sm mb-4">

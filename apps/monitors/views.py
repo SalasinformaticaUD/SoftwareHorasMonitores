@@ -8,15 +8,17 @@ from django.views import View
 from django.views.generic import TemplateView
 
 from apps.common.choices import UserRoleChoices
-from apps.common.web import AdminOrLeaderRequiredMixin, paginate_collection
-from apps.monitors.forms import MonitorBulkUploadForm, MonitorRegistrationForm
+from apps.common.web import AdminOrLeaderRequiredMixin, AdminRequiredMixin, paginate_collection
+from apps.monitors.forms import MonitorBulkUploadForm, MonitorRegistrationForm, SemesterResetConfirmationForm
 from apps.monitors.models import Monitor
 from apps.monitors.selectors import visible_monitors_for_user
 from apps.monitors.services import (
     create_monitor_with_user,
     delete_monitor_account,
     import_monitors_from_workbook,
+    reset_semester_data,
     resend_monitor_activation,
+    semester_reset_preview_counts,
     set_monitor_account_active,
     update_monitor_with_user,
 )
@@ -254,3 +256,50 @@ class MonitorMemorandumDownloadView(AdminOrLeaderRequiredMixin, View):
             raise Http404("El archivo del memorando no existe.") from exc
         filename = memorandum.pdf_file.name.rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
         return FileResponse(handle, as_attachment=False, filename=filename, content_type="application/pdf")
+
+
+class SemesterResetView(AdminRequiredMixin, TemplateView):
+    """Permite a un administrador iniciar un semestre nuevo."""
+
+    template_name = "admin_portal/monitors/semester_reset.html"
+
+    reset_items = (
+        ("monitors", "Monitores"),
+        ("monitor_users", "Cuentas de usuario monitor"),
+        ("schedules", "Horarios"),
+        ("schedule_exceptions", "Excepciones"),
+        ("attendance_import_jobs", "Cargas de asistencia"),
+        ("attendance_raw_records", "Registros importados"),
+        ("work_sessions", "Registros procesados y horas extra"),
+        ("attendance_inconsistencies", "Inconsistencias"),
+        ("annotations", "Anotaciones"),
+        ("report_snapshots", "Reportes generados"),
+        ("memorandums", "Memorandos"),
+        ("notifications", "Notificaciones"),
+    )
+
+    def _count_rows(self):
+        counts = semester_reset_preview_counts()
+        return [{"key": key, "label": label, "count": counts.get(key, 0)} for key, label in self.reset_items]
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.update(
+            {
+                "form": kwargs.get("form") or SemesterResetConfirmationForm(admin_user=self.request.user),
+                "count_rows": self._count_rows(),
+                "reset_attempted": kwargs.get("reset_attempted", False),
+            }
+        )
+        return context
+
+    def post(self, request, *args, **kwargs):
+        form = SemesterResetConfirmationForm(request.POST, admin_user=request.user)
+        if not form.is_valid():
+            messages.error(request, "No se pudo confirmar la accion. Revisa la contrasena.")
+            return self.render_to_response(self.get_context_data(form=form, reset_attempted=True))
+
+        result = reset_semester_data()
+        deleted_total = sum(result.deleted_counts.values())
+        messages.success(request, f"Semestre nuevo iniciado. Se limpiaron {deleted_total} registros operativos.")
+        return redirect("admin-monitors")

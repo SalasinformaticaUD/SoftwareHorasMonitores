@@ -94,6 +94,32 @@ def test_import_schedules_from_workbook_is_idempotent_for_existing_blocks():
 
 
 @pytest.mark.django_db
+def test_import_schedules_from_workbook_accepts_english_block_labels():
+    monitor = MonitorFactory(
+        codigo_estudiante="20202005011",
+        full_name="CARLOS RAMIREZ",
+        department=DepartmentChoices.ELECTRICAL,
+    )
+    workbook = build_schedule_workbook(
+        [
+            ["", "NAME:", monitor.full_name],
+            ["", "STUDENT CODE:", monitor.codigo_estudiante],
+            ["", "SUBJECT", "GROUP", "TEACHER", "CURRICULAR PROJECT", "DAY/HOUR", "LAB"],
+            ["", "CIRCUITOS", "1", "DOCENTE 1", "ING ELECTRONICA", "VIERNES 8-10", "LAB A"],
+        ]
+    )
+
+    result = import_schedules_from_workbook(uploaded_file=workbook)
+
+    schedule = Schedule.objects.get(monitor=monitor)
+    assert result.processed_monitors == 1
+    assert result.created == 1
+    assert schedule.weekday == Schedule.Weekday.FRIDAY
+    assert schedule.start_time.isoformat() == "08:00:00"
+    assert schedule.end_time.isoformat() == "10:00:00"
+
+
+@pytest.mark.django_db
 def test_leader_cannot_import_schedules_for_other_department():
     leader = UserFactory(department=DepartmentChoices.PHYSICS)
     monitor = MonitorFactory(

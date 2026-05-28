@@ -92,6 +92,24 @@ class MonitorBulkUploadForm(forms.Form):
         validate_excel_extension(source_file.name)
         return source_file
 
+
+class SemesterResetConfirmationForm(forms.Form):
+    password = forms.CharField(
+        label="Contrasena del administrador",
+        widget=forms.PasswordInput(attrs={"autocomplete": "current-password"}),
+    )
+
+    def __init__(self, *args, admin_user=None, **kwargs):
+        self.admin_user = admin_user
+        super().__init__(*args, **kwargs)
+        _apply_bootstrap(self.fields["password"])
+
+    def clean_password(self):
+        password = self.cleaned_data["password"]
+        if not self.admin_user or not self.admin_user.check_password(password):
+            raise forms.ValidationError("La contrasena no coincide con tu cuenta de administrador.")
+        return password
+
 class MonitorActaCompromisoUploadForm(forms.Form):
     source_file = forms.FileField(label="Acta de compromiso (PDF)")
 

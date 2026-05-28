@@ -29,7 +29,7 @@ from apps.reports.views import (
 )
 from apps.users.views import RoleAwareLoginView
 from apps.schedules.views import ScheduleExceptionListView
-from apps.monitors.views import MonitorAdminView, MonitorMemorandumDownloadView
+from apps.monitors.views import MonitorAdminView, MonitorMemorandumDownloadView, SemesterResetView
 from apps.schedules.views import ScheduleAdminView
 from apps.work_sessions.views import InconsistencyManagementView, OvertimeReviewListView
 from apps.annotations.views import AnnotationManagementView
@@ -50,6 +50,7 @@ urlpatterns = [
     path("", root_redirect, name="root"),
     path("healthz/", health_check, name="healthz"),
     path("admin/monitors/", MonitorAdminView.as_view(), name="admin-monitors"),
+    path("admin/monitors/iniciar-semestre/", SemesterResetView.as_view(), name="admin-semester-reset"),
     path(
         "admin/monitors/<uuid:monitor_id>/memorandos/<uuid:memorandum_id>.pdf",
         MonitorMemorandumDownloadView.as_view(),

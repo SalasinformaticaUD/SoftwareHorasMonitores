@@ -34,6 +34,76 @@ DAY_HOUR_PATTERN = re.compile(
 )
 
 
+SCHEDULE_ROW_REQUIRED_COLUMNS = ("email_monitor", "day", "start_time", "end_time", "location")
+SCHEDULE_ROW_COLUMN_ALIASES = {
+    "email_monitor": (
+        "email_monitor",
+        "monitor email",
+        "email monitor",
+        "correo monitor",
+        "correo del monitor",
+        "email del monitor",
+    ),
+    "day": (
+        "day",
+        "weekday",
+        "dia",
+        "dia semana",
+        "dia de la semana",
+    ),
+    "start_time": (
+        "start_time",
+        "start time",
+        "start",
+        "hora inicio",
+        "hora inicial",
+        "inicio",
+    ),
+    "end_time": (
+        "end_time",
+        "end time",
+        "end",
+        "hora fin",
+        "hora final",
+        "fin",
+    ),
+    "location": (
+        "location",
+        "place",
+        "ubicacion",
+        "lugar",
+        "salon",
+        "laboratorio",
+    ),
+    "asignatura": (
+        "asignatura",
+        "subject",
+        "course",
+        "materia",
+    ),
+    "grupo": (
+        "grupo",
+        "group",
+    ),
+    "docente": (
+        "docente",
+        "teacher",
+        "profesor",
+        "instructor",
+    ),
+    "proyecto_curricular": (
+        "proyecto_curricular",
+        "proyecto curricular",
+        "programa",
+        "curricular project",
+        "academic program",
+    ),
+}
+BLOCK_MONITOR_NAME_LABELS = ("NOMBRE", "NAME")
+BLOCK_MONITOR_CODE_LABELS = ("CODIGO", "CODE", "STUDENT CODE")
+BLOCK_DAY_HOUR_HEADER_ALIASES = {"dia hora", "day hour", "day time"}
+
+
 @dataclass
 class ParsedScheduleBlock:
     weekday: int
@@ -74,6 +144,14 @@ def _row_label_value(row_values: list[str], target_label: str) -> Optional[str]:
             for candidate in row_values[index + 1 :]:
                 if candidate:
                     return candidate.strip()
+    return None
+
+
+def _row_label_value_any(row_values: list[str], target_labels: Iterable[str]) -> Optional[str]:
+    for label in target_labels:
+        value = _row_label_value(row_values, label)
+        if value is not None:
+            return value
     return None
 
 
@@ -267,8 +345,28 @@ def delete_schedule(*, schedule: Schedule) -> None:
     schedule.delete()
 
 
+def _normalize_header_key(value: Any) -> str:
+    text = str(value or "").strip().replace("_", " ").replace("-", " ").replace("/", " ")
+    return normalize_text(text).rstrip(":")
+
+
+def _schedule_column_alias_lookup() -> dict[str, str]:
+    lookup: dict[str, str] = {}
+    for internal_name, aliases in SCHEDULE_ROW_COLUMN_ALIASES.items():
+        lookup[_normalize_header_key(internal_name)] = internal_name
+        for alias in aliases:
+            lookup[_normalize_header_key(alias)] = internal_name
+    return lookup
+
+
 def _schedule_header_map(headers) -> dict[str, int]:
-    return {normalize_text(str(header or "").strip()): index for index, header in enumerate(headers)}
+    alias_lookup = _schedule_column_alias_lookup()
+    mapped_headers: dict[str, int] = {}
+    for index, header in enumerate(headers):
+        internal_name = alias_lookup.get(_normalize_header_key(header))
+        if internal_name and internal_name not in mapped_headers:
+            mapped_headers[internal_name] = index
+    return mapped_headers
 
 
 def _parse_time_value(value: Any) -> time:
@@ -321,9 +419,8 @@ def import_schedule_rows_from_workbook(*, uploaded_file, actor=None) -> Schedule
     except StopIteration:
         raise ValidationError("El archivo esta vacio.")
 
-    required_columns = ("email_monitor", "day", "start_time", "end_time", "location")
     mapped_headers = _schedule_header_map(headers)
-    missing = [column for column in required_columns if column not in mapped_headers]
+    missing = [column for column in SCHEDULE_ROW_REQUIRED_COLUMNS if column not in mapped_headers]
     if missing:
         raise ValidationError("Faltan columnas requeridas: " + ", ".join(missing))
 
@@ -449,7 +546,7 @@ def import_schedules_from_workbook(*, uploaded_file, actor=None) -> ScheduleImpo
         if not any(row_values):
             continue
 
-        monitor_name = _row_label_value(row_values, "NOMBRE")
+        monitor_name = _row_label_value_any(row_values, BLOCK_MONITOR_NAME_LABELS)
         if monitor_name is not None:
             _flush_monitor_blocks(
                 monitor_code=current_monitor_code,
@@ -464,14 +561,18 @@ def import_schedules_from_workbook(*, uploaded_file, actor=None) -> ScheduleImpo
             day_hour_column_index = None
             continue
 
-        monitor_code = _row_label_value(row_values, "CODIGO")
+        monitor_code = _row_label_value_any(row_values, BLOCK_MONITOR_CODE_LABELS)
         if monitor_code is not None:
             current_monitor_code = monitor_code
             continue
 
-        normalized_headers = [normalize_text(value).replace("/", "_") for value in row_values]
-        if "dia_hora" in normalized_headers:
-            day_hour_column_index = normalized_headers.index("dia_hora")
+        normalized_headers = [_normalize_header_key(value) for value in row_values]
+        header_day_hour_column_index = next(
+            (index for index, header in enumerate(normalized_headers) if header in BLOCK_DAY_HOUR_HEADER_ALIASES),
+            None,
+        )
+        if header_day_hour_column_index is not None:
+            day_hour_column_index = header_day_hour_column_index
             continue
 
         if day_hour_column_index is None or day_hour_column_index >= len(row_values):

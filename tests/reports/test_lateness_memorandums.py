@@ -6,6 +6,7 @@ from django.utils import timezone
 
 from apps.reports.models import MonitorMemorandum
 from apps.reports.services import _lateness_observation, send_lateness_memorandum
+from apps.work_sessions.models import WorkSession
 from apps.work_sessions.services import process_raw_record_to_session
 from tests.factories import AttendanceRawRecordFactory, MonitorFactory, ScheduleFactory, UserFactory
 
@@ -98,6 +99,37 @@ def test_lateness_memorandum_is_created_without_email_and_can_be_resent(settings
     assert memorandum.sent_at is not None
     assert len(mail.outbox) == 1
     assert mail.outbox[0].to == [user.email]
+
+
+@pytest.mark.django_db
+def test_email_failure_does_not_rollback_late_session_or_memorandum(monkeypatch, settings):
+    settings.DEFAULT_FROM_EMAIL = "no-reply@example.edu"
+    user = UserFactory(username="monitor-correo-falla", email="monitor.falla@example.edu")
+    monitor = MonitorFactory(user=user, full_name="Monitor Correo Falla")
+    ScheduleFactory(monitor=monitor, weekday=0)
+
+    def fail_delivery(**kwargs):
+        raise RuntimeError("SMTP sin credenciales")
+
+    monkeypatch.setattr("apps.reports.services._deliver_lateness_memorandum_email", fail_delivery)
+
+    for index, minute in enumerate([7, 8, 9], start=1):
+        raw_record = AttendanceRawRecordFactory(
+            monitor=monitor,
+            raw_full_name=monitor.full_name,
+            row_number=index,
+            entry_at=timezone.make_aware(datetime(2026, 4, 13, 8, minute)),
+            exit_at=timezone.make_aware(datetime(2026, 4, 13, 12, 0)),
+        )
+        process_raw_record_to_session(raw_record=raw_record)
+        raw_record.refresh_from_db()
+        assert raw_record.processed_at is not None
+
+    memorandum = MonitorMemorandum.objects.get(monitor=monitor)
+    assert WorkSession.objects.filter(monitor=monitor, is_late=True).count() == 3
+    assert memorandum.sent_to == user.email
+    assert memorandum.sent_at is None
+    assert memorandum.pdf_file.name.endswith(".pdf")
 
 
 @pytest.mark.django_db

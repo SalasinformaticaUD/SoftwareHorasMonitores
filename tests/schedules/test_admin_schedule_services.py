@@ -86,3 +86,40 @@ def test_import_schedule_rows_matches_monitor_by_email_and_reports_missing_monit
     assert schedule.grupo == "G2"
     assert schedule.docente == "Docente Dos"
     assert schedule.proyecto_curricular == "ingenieria_electrica"
+
+
+@pytest.mark.django_db
+def test_import_schedule_rows_accepts_spanish_headers():
+    user = UserFactory(
+        username="spanish.schedule@example.edu",
+        email="spanish.schedule@example.edu",
+        role=UserRoleChoices.MONITOR,
+        department=DepartmentChoices.PHYSICS,
+        is_staff=False,
+    )
+    monitor = MonitorFactory(user=user, department=DepartmentChoices.PHYSICS)
+    workbook = build_schedule_rows_workbook(
+        [
+            [
+                "correo monitor",
+                "dia",
+                "hora inicio",
+                "hora fin",
+                "ubicacion",
+                "asignatura",
+                "grupo",
+                "docente",
+                "proyecto curricular",
+            ],
+            [user.email, "martes", "12:00", "14:00", "Lab C", "Programacion", "G1", "Docente Tres", "Ingenieria de sistemas"],
+        ]
+    )
+
+    result = import_schedule_rows_from_workbook(uploaded_file=workbook)
+
+    assert result.total_rows == 1
+    assert result.created == 1
+    schedule = Schedule.objects.get(monitor=monitor, location="Lab C")
+    assert schedule.weekday == Schedule.Weekday.TUESDAY
+    assert schedule.asignatura == "Programacion"
+    assert schedule.proyecto_curricular == "ingenieria_sistemas"

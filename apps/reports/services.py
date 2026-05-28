@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from html import escape
 from pathlib import Path
+import logging
 import re
 import os
 from io import BytesIO
@@ -47,6 +48,9 @@ from apps.common.utils import normalize_text
 from apps.reports.events import REPORT_GENERATED
 from apps.reports.models import MonitorMemorandum, MonitorReportSnapshot
 from apps.reports.selectors import aggregate_monitor_metrics, build_monitor_rows_for_user
+
+
+logger = logging.getLogger(__name__)
 
 
 @transaction.atomic
@@ -677,21 +681,28 @@ def create_and_send_lateness_memorandum(*, monitor, late_count: int) -> MonitorM
     pdf_bytes = generate_lateness_memorandum_pdf(monitor=monitor, late_count=late_count)
     filename = _memorandum_filename(monitor=monitor, late_count=late_count)
     memorandum.pdf_file.save(filename, ContentFile(pdf_bytes), save=False)
+    memorandum.save(update_fields=["sent_to", "pdf_file", "updated_at"])
 
     if not email:
-        memorandum.save(update_fields=["sent_to", "pdf_file", "updated_at"])
         return memorandum
 
-    _deliver_lateness_memorandum_email(
-        monitor=monitor,
-        email=email,
-        filename=filename,
-        pdf_bytes=pdf_bytes,
-        late_count=late_count,
-    )
+    try:
+        _deliver_lateness_memorandum_email(
+            monitor=monitor,
+            email=email,
+            filename=filename,
+            pdf_bytes=pdf_bytes,
+            late_count=late_count,
+        )
+    except Exception:
+        logger.exception(
+            "No se pudo enviar el memorando de retardos para monitor %s.",
+            monitor.id,
+        )
+        return memorandum
     memorandum.sent_to = email
     memorandum.sent_at = timezone.now()
-    memorandum.save(update_fields=["sent_to", "sent_at", "pdf_file", "updated_at"])
+    memorandum.save(update_fields=["sent_to", "sent_at", "updated_at"])
     return memorandum
 
 

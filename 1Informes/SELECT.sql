@@ -1,5 +1,4 @@
-SELECT 
-    u.email,
+SELECT u.email,
     m.full_name,
     m.codigo_estudiante,
     CASE m.department

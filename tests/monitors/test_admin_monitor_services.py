@@ -7,11 +7,18 @@ from django.core import mail
 from openpyxl import Workbook
 
 from apps.common.choices import DepartmentChoices, UserRoleChoices
+from apps.monitors.forms import MonitorRegistrationForm
 from apps.monitors.models import Monitor
 from apps.monitors.services import create_monitor_with_user, import_monitors_from_workbook, update_monitor_with_user
 
 
 User = get_user_model()
+
+
+def test_monitor_registration_form_includes_physics_teaching_degree():
+    form = MonitorRegistrationForm()
+
+    assert ("licenciatura_fisica", "Licenciatura en Física") in form.fields["proyecto_curricular"].choices
 
 
 def build_monitor_workbook(rows):
@@ -77,6 +84,35 @@ def test_import_monitors_from_workbook_skips_existing_email_and_continues():
     assert monitor.numero_documento == "20202020"
     assert monitor.proyecto_curricular == "ingenieria_sistemas"
     assert monitor.telefono == "3100000000"
+
+
+@pytest.mark.django_db
+def test_import_monitors_from_workbook_accepts_spanish_headers():
+    workbook = build_monitor_workbook(
+        [
+            ["correo", "nombre completo", "codigo estudiante", "dependencia", "numero documento", "proyecto curricular", "telefono"],
+            [
+                "spanish.headers@example.edu",
+                "Monitor Encabezados",
+                "20261230",
+                DepartmentChoices.PHYSICS,
+                "1010101010",
+                "Ingenieria de sistemas",
+                "3101112233",
+            ],
+        ]
+    )
+
+    result = import_monitors_from_workbook(uploaded_file=workbook)
+
+    assert result.total_rows == 1
+    assert result.created == 1
+    monitor = Monitor.objects.get(codigo_estudiante="20261230")
+    assert monitor.user.email == "spanish.headers@example.edu"
+    assert monitor.full_name == "Monitor Encabezados"
+    assert monitor.numero_documento == "1010101010"
+    assert monitor.proyecto_curricular == "ingenieria_sistemas"
+    assert monitor.telefono == "3101112233"
 
 
 @pytest.mark.django_db

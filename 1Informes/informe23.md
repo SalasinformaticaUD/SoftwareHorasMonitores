@@ -2,7 +2,7 @@ FECHA: 21/05/2026
 TURNO:  12m - 10 pm, 4pm - 10pm
 MONITOR: Kevin Rincon - Sergio Nicolás Mendivelso
 
-**NOTA: La presentación del 22 de mayo a las 10 am del aplicativo se va a hacer corriendo desde la terminal del VSCode usando el comando: "python manage.py runserver" Y luego accediendo a la URL: http://127.0.0.1:8000**
+ 
 
 AVANCES:
 - Se cambió la forma de ver registros y la liena de tiempo asosciada. Ahora en línea de tiempo multinivel se pueden observar los registros de un solo día.

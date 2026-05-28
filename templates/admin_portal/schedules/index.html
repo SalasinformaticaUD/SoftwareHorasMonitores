@@ -184,25 +184,21 @@
       <div class="card admin-card">
         <div class="card-body">
           <h2 class="h5 mb-1">Carga masiva</h2>
-          <p class="text-muted small mb-3">
-            <strong>Columnas esperadas:</strong> <br>
-            <p class="small mb-3" style="color: var(--ud-red-deep);">
-              email_monitor<br>
-              day <b>(Lunes, Martes, Miércoles, Jueves, Viernes, Sábado)</b><br>
-              start_time <b>(Formato 24 hrs: 06:00:00 a 22:00:00)</b><br>
-              end_time <b>(Formato 24 hrs: 06:00:00 a 22:00:00)</b><br>
-              location <br>
-            </p>
-            <p class="text-muted small mb-3">   
-              <strong>Opcionales:</strong><br>
-            </p>
-            <p class="small mb-3" style="color: var(--ud-red-deep);">
-                asignatura<br>
-                grupo<br>
-                docente<br>
-                proyecto_curricular <b>(ingenieria_electronica, ingenieria_sistemas, ingenieria_electrica, ingenieria_industrial, ingenieria_catastral)</b><br>
-                telefono 
-            </p>
+          <p class="text-muted small mb-2">Puedes usar encabezados en ingles o espanol.</p>
+          <p class="text-muted small mb-1"><strong>Requeridos:</strong></p>
+          <p class="small mb-3" style="color: var(--ud-red-deep);">
+            email_monitor / correo monitor<br>
+            day / dia <b>(Lunes, Martes, Miercoles, Jueves, Viernes, Sabado)</b><br>
+            start_time / hora inicio <b>(Formato 24 hrs: 06:00:00 a 22:00:00)</b><br>
+            end_time / hora fin <b>(Formato 24 hrs: 06:00:00 a 22:00:00)</b><br>
+            location / ubicacion<br>
+          </p>
+          <p class="text-muted small mb-1"><strong>Opcionales:</strong></p>
+          <p class="small mb-3" style="color: var(--ud-red-deep);">
+            asignatura / subject<br>
+            grupo / group<br>
+            docente / teacher<br>
+            proyecto_curricular / proyecto curricular <b>(ingenieria_electronica, ingenieria_sistemas, ingenieria_electrica, ingenieria_industrial, ingenieria_catastral, licenciatura_fisica)</b>
           </p>
           <form method="post" enctype="multipart/form-data" novalidate>
             {% csrf_token %}
@@ -432,4 +428,21 @@
     </div>
   </div>
 </div>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  document.querySelectorAll('.modal').forEach(function (modal) {
+    document.body.appendChild(modal);
+  });
+
+  document.querySelectorAll('[data-bs-toggle="modal"]').forEach(function (trigger) {
+    trigger.addEventListener('click', function () {
+      const targetId = this.getAttribute('data-bs-target');
+      const modalEl = document.querySelector(targetId);
+      if (modalEl) {
+        bootstrap.Modal.getOrCreateInstance(modalEl).show();
+      }
+    });
+  });
+});
+</script>
 {% endblock %}

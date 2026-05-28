@@ -27,6 +27,57 @@ User = get_user_model()
 
 MONITOR_UPLOAD_COLUMNS = ("email", "full_name", "codigo_estudiante", "department")
 MONITOR_OPTIONAL_UPLOAD_COLUMNS = ("numero_documento", "proyecto_curricular", "telefono")
+MONITOR_UPLOAD_COLUMN_ALIASES = {
+    "email": (
+        "email",
+        "correo",
+        "correo electronico",
+        "correo institucional",
+        "mail",
+    ),
+    "full_name": (
+        "full_name",
+        "full name",
+        "name",
+        "nombre",
+        "nombre completo",
+    ),
+    "codigo_estudiante": (
+        "codigo_estudiante",
+        "codigo estudiante",
+        "codigo estudiantil",
+        "codigo",
+        "student code",
+        "student id",
+    ),
+    "department": (
+        "department",
+        "dependencia",
+        "departamento",
+        "area",
+    ),
+    "numero_documento": (
+        "numero_documento",
+        "numero documento",
+        "documento",
+        "document number",
+        "id number",
+    ),
+    "proyecto_curricular": (
+        "proyecto_curricular",
+        "proyecto curricular",
+        "programa",
+        "curricular project",
+        "academic program",
+    ),
+    "telefono": (
+        "telefono",
+        "celular",
+        "phone",
+        "phone number",
+        "mobile",
+    ),
+}
 
 
 class MonitorActivationForm(PasswordResetForm):
@@ -93,6 +144,13 @@ class MonitorImportResult:
     created: int = 0
     skipped: list[ImportIssue] = field(default_factory=list)
     errors: list[ImportIssue] = field(default_factory=list)
+
+
+@dataclass
+class SemesterResetResult:
+    """Resumen de datos eliminados al iniciar un semestre nuevo."""
+
+    deleted_counts: dict[str, int] = field(default_factory=dict)
 
 
 def send_monitor_activation_email(*, user, request=None) -> bool:
@@ -397,16 +455,38 @@ def _normalize_project(value: Any) -> str:
     return project
 
 
+def _normalize_header_key(value: Any) -> str:
+    """Normaliza nombres de columnas sin depender del separador usado."""
+    text = str(value or "").strip().replace("_", " ").replace("-", " ")
+    return normalize_text(text).rstrip(":")
+
+
+def _upload_column_alias_lookup() -> dict[str, str]:
+    """Construye alias bilingues de encabezados a claves internas."""
+    lookup: dict[str, str] = {}
+    for internal_name, aliases in MONITOR_UPLOAD_COLUMN_ALIASES.items():
+        lookup[_normalize_header_key(internal_name)] = internal_name
+        for alias in aliases:
+            lookup[_normalize_header_key(alias)] = internal_name
+    return lookup
+
+
 def _header_map(headers) -> dict[str, int]:
-    """Mapea encabezados de Excel normalizados a indices de columna.
+    """Mapea encabezados de Excel en espanol o ingles a indices de columna.
 
     Args:
         headers: Iterable de encabezados originales.
 
     Returns:
-        dict[str, int]: Nombre normalizado -> indice de columna.
+        dict[str, int]: Nombre interno -> indice de columna.
     """
-    return {normalize_text(str(header or "").strip()): index for index, header in enumerate(headers)}
+    alias_lookup = _upload_column_alias_lookup()
+    mapped_headers: dict[str, int] = {}
+    for index, header in enumerate(headers):
+        internal_name = alias_lookup.get(_normalize_header_key(header))
+        if internal_name and internal_name not in mapped_headers:
+            mapped_headers[internal_name] = index
+    return mapped_headers
 
 
 def import_monitors_from_workbook(*, uploaded_file, request=None, actor=None) -> MonitorImportResult:
@@ -489,3 +569,55 @@ def import_monitors_from_workbook(*, uploaded_file, request=None, actor=None) ->
             reason = "; ".join(exc.messages) if hasattr(exc, "messages") else str(exc)
             result.errors.append(ImportIssue(row_number=row_number, email=email or "-", reason=reason))
     return result
+
+
+def semester_reset_preview_counts() -> dict[str, int]:
+    """Cuenta los datos operativos que se eliminarian al iniciar semestre."""
+    from apps.annotations.models import Annotation
+    from apps.attendance.models import AttendanceImportJob, AttendanceInconsistency, AttendanceRawRecord
+    from apps.notifications.models import Notification
+    from apps.reports.models import MonitorMemorandum, MonitorReportSnapshot
+    from apps.schedules.models import Schedule, ScheduleException
+    from apps.work_sessions.models import WorkSession
+
+    return {
+        "monitors": Monitor.objects.count(),
+        "monitor_users": User.objects.filter(role=UserRoleChoices.MONITOR).count(),
+        "schedules": Schedule.objects.count(),
+        "schedule_exceptions": ScheduleException.objects.count(),
+        "attendance_import_jobs": AttendanceImportJob.objects.count(),
+        "attendance_raw_records": AttendanceRawRecord.objects.count(),
+        "work_sessions": WorkSession.objects.count(),
+        "attendance_inconsistencies": AttendanceInconsistency.objects.count(),
+        "annotations": Annotation.objects.count(),
+        "report_snapshots": MonitorReportSnapshot.objects.count(),
+        "memorandums": MonitorMemorandum.objects.count(),
+        "notifications": Notification.objects.count(),
+    }
+
+
+@transaction.atomic
+def reset_semester_data() -> SemesterResetResult:
+    """Elimina datos operativos del semestre y conserva usuarios admin/lider."""
+    from apps.annotations.models import Annotation
+    from apps.attendance.models import AttendanceImportJob, AttendanceInconsistency
+    from apps.notifications.models import Notification
+    from apps.reports.models import MonitorMemorandum, MonitorReportSnapshot
+    from apps.schedules.models import Schedule, ScheduleException
+    from apps.work_sessions.models import WorkSession
+
+    deleted_counts = semester_reset_preview_counts()
+
+    Annotation.objects.all().delete()
+    WorkSession.objects.all().delete()
+    AttendanceInconsistency.objects.all().delete()
+    AttendanceImportJob.objects.all().delete()
+    MonitorReportSnapshot.objects.all().delete()
+    MonitorMemorandum.objects.all().delete()
+    Schedule.objects.all().delete()
+    ScheduleException.objects.all().delete()
+    Monitor.objects.all().delete()
+    User.objects.filter(role=UserRoleChoices.MONITOR).delete()
+    Notification.objects.all().delete()
+
+    return SemesterResetResult(deleted_counts=deleted_counts)

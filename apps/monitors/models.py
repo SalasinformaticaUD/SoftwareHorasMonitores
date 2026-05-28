@@ -12,6 +12,7 @@ PROJECT_CHOICES = (
     ("ingenieria_electrica", "Ingenieria electrica"),
     ("ingenieria_catastral", "Ingenieria catastral"),
     ("ingenieria_industrial", "Ingenieria industrial"),
+    ("licenciatura_fisica", "Licenciatura en Física"),
 )
 
 

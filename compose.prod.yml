@@ -1,6 +1,4 @@
 x-app-common: &app-common
-  build:
-    context: .
   image: adminsalas/monitores-app:latest
   env_file:
     - .env
@@ -35,9 +33,6 @@ services:
       start_period: 30s
 
   db:
-    build:
-      context: ./docker/db
-      dockerfile: Dockerfile
     image: adminsalas/monitores-db:latest
     ports:
       - "5436:5432"
@@ -55,8 +50,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
-
 
 volumes:
   media_data:

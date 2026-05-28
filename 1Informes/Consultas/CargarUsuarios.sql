@@ -14,7 +14,7 @@ COPY users_user (
     updated_at,
     role,
     department
-) FROM 'C:\temp\initial_users.csv' WITH CSV HEADER;
+) FROM 'C:\Users\ud\Documents\MonitoresV1.1.0\SoftwareHorasMonitores\docker\db\initial_users.csv' WITH CSV HEADER;
 
 
 SELECT * FROM users_user

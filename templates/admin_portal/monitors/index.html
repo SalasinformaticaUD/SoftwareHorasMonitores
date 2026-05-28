@@ -14,6 +14,11 @@
       <p class="admin-subtitle">Administra cuentas institucionales, vinculacion de monitores, activaciones y cargas masivas desde Excel.</p>
     </div>
     <div class="d-flex gap-2 flex-wrap">
+      {% if is_admin_scope %}
+        <a class="btn btn-outline-danger btn-icon" href="{% url 'admin-semester-reset' %}">
+          <span aria-hidden="true"></span> Iniciar semestre nuevo
+        </a>
+      {% endif %}
       <a class="btn btn-outline-primary btn-icon" href="#monitor-upload"><span aria-hidden="true">↑</span> Cargar Excel</a>
       <a class="btn btn-primary btn-icon" href="#monitor-form"><span aria-hidden="true">+</span> Nuevo monitor</a>
     </div>
@@ -80,22 +85,19 @@
       <div class="card admin-card" id="monitor-upload">
         <div class="card-body">
           <h2 class="h5 mb-1">Carga masiva</h2>
-          <p class="text-muted small mb-3">
-            <strong>Columnas esperadas:</strong> <br>
-            <p class="small mb-3" style="color: var(--ud-red-deep);">
-              email<br>
-              full_name<br>
-              codigo_estudiante<br>
-              department <b>(Monitores Aulas de Software, Monitores Laboratorios, Monitores Fisica)</b>.<br>
-            </p>
-            <p class="text-muted small mb-3">   
-              <strong>Opcionales:</strong><br>
-            </p>
-            <p class="small mb-3" style="color: var(--ud-red-deep);">
-                numero_documento<br>
-                proyecto_curricular <b>(ingenieria_electronica, ingenieria_sistemas, ingenieria_electrica, ingenieria_industrial, ingenieria_catastral)</b><br>
-                telefono 
-            </p>
+          <p class="text-muted small mb-2">Puedes usar encabezados en ingles o espanol.</p>
+          <p class="text-muted small mb-1"><strong>Requeridos:</strong></p>
+          <p class="small mb-3" style="color: var(--ud-red-deep);">
+            email / correo<br>
+            full_name / nombre completo<br>
+            codigo_estudiante / codigo estudiante<br>
+            department / dependencia <b>(Monitores Aulas de Software, Monitores Laboratorios, Monitores Fisica)</b>.<br>
+          </p>
+          <p class="text-muted small mb-1"><strong>Opcionales:</strong></p>
+          <p class="small mb-3" style="color: var(--ud-red-deep);">
+            numero_documento / numero documento<br>
+            proyecto_curricular / proyecto curricular <b>(ingenieria_electronica, ingenieria_sistemas, ingenieria_electrica, ingenieria_industrial, ingenieria_catastral, licenciatura_fisica)</b><br>
+            telefono / phone
           </p>
           <form method="post" enctype="multipart/form-data" novalidate>
             {% csrf_token %}

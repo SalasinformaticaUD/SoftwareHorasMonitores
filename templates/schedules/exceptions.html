@@ -82,7 +82,7 @@
           {% endif %}
         </div>
 
-        <<form method="post" class="was-validated">
+        <form method="post" class="was-validated">
           {% csrf_token %}
           <input type="hidden" name="action" value="save">
           {% if editing_exception %}

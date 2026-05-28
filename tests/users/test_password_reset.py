@@ -1,5 +1,8 @@
 from django.core import mail
+from django.contrib.auth.tokens import default_token_generator
 from django.urls import reverse
+from django.utils.encoding import force_bytes
+from django.utils.http import urlsafe_base64_encode
 
 import pytest
 
@@ -27,3 +30,27 @@ def test_password_reset_sends_recovery_email(client):
     assert mail.outbox[0].to == [user.email]
     assert "Recupera tu contrasena" in mail.outbox[0].subject
     assert "/accounts/reset/" in mail.outbox[0].body
+
+
+@pytest.mark.django_db
+def test_password_reset_confirm_shows_error_modal_when_password_is_invalid(client):
+    user = UserFactory(email="lider.modal@example.com", username="lider.modal@example.com")
+    uidb64 = urlsafe_base64_encode(force_bytes(user.pk))
+    token = default_token_generator.make_token(user)
+
+    response = client.get(reverse("password_reset_confirm", args=[uidb64, token]))
+    assert response.status_code == 302
+
+    response = client.post(
+        response.url,
+        {
+            "new_password1": "abc",
+            "new_password2": "xyz",
+        },
+    )
+
+    content = response.content.decode()
+    assert response.status_code == 200
+    assert "passwordErrorModal" in content
+    assert "No se pudo crear la contrasena" in content
+    assert "Corrige lo siguiente e intenta nuevamente" in content

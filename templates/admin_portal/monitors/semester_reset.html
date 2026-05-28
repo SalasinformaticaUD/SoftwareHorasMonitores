@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+
+{% block title %}Iniciar semestre nuevo{% endblock %}
+
+{% block content %}
+<style>
+  .semester-reset-shell {
+    min-height: 68vh;
+    display: grid;
+    align-items: stretch;
+  }
+
+  .semester-reset-warning {
+    border: 2px solid #8f171b;
+    border-radius: 0.5rem;
+    background: #fff7f7;
+    box-shadow: 0 22px 48px rgba(84, 0, 6, 0.14);
+    overflow: hidden;
+  }
+
+  .semester-reset-header {
+    padding: 1.5rem;
+    background: #8f171b;
+    color: #fff;
+  }
+
+  .semester-reset-header h1 {
+    margin: 0;
+    font-size: 1.75rem;
+  }
+
+  .semester-reset-body {
+    padding: 1.5rem;
+  }
+
+  .semester-reset-important {
+    padding: 1rem;
+    border-left: 5px solid #8f171b;
+    background: #fff;
+    color: #571014;
+    font-weight: 700;
+  }
+
+  .semester-reset-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+    gap: 0.75rem;
+  }
+
+  .semester-reset-count {
+    min-height: 5.75rem;
+    padding: 0.85rem;
+    border: 1px solid rgba(143, 23, 27, 0.2);
+    border-radius: 0.4rem;
+    background: #fff;
+  }
+
+  .semester-reset-count strong {
+    display: block;
+    color: #8f171b;
+    font-size: 1.4rem;
+    line-height: 1.2;
+  }
+</style>
+
+<div class="semester-reset-shell">
+  <section class="semester-reset-warning">
+    <div class="semester-reset-header">
+      <div class="admin-crumb text-white-50 mb-2">
+        <span>Administracion</span><span>/</span><strong>Iniciar semestre nuevo</strong>
+      </div>
+      <h1>Iniciar semestre nuevo</h1>
+      <p class="mb-0 mt-2">Esta accion limpia los datos operativos del semestre actual para registrar nuevos monitores y nuevos registros.</p>
+    </div>
+
+    <div class="semester-reset-body">
+      <div class="semester-reset-important mb-4">
+        Mensaje importante: esta accion no se puede deshacer desde la aplicacion. Antes de continuar, verifica que ya tengas una copia de seguridad o los exportes necesarios del semestre actual.
+      </div>
+
+      <div class="row g-4">
+        <div class="col-lg-7">
+          <h2 class="h5">Que se va a borrar</h2>
+          <p class="text-muted">Se eliminaran monitores, cuentas de usuarios monitor, horarios, registros importados, jornadas procesadas, horas extra, anotaciones, inconsistencias, memorandos, reportes, excepciones y notificaciones.</p>
+          <p class="text-muted mb-3">Se conservan los usuarios administradores y lideres para que puedas seguir entrando al sistema.</p>
+
+          <div class="semester-reset-grid">
+            {% for row in count_rows %}
+              <div class="semester-reset-count">
+                <strong>{{ row.count }}</strong>
+                <span>{{ row.label }}</span>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+
+        <div class="col-lg-5">
+          <div class="card admin-card">
+            <div class="card-body">
+              <h2 class="h5 mb-2">Confirmacion obligatoria</h2>
+              <p class="text-muted small">Para confirmar que eres tu, escribe nuevamente tu contrasena de administrador.</p>
+
+              <form method="post" novalidate>
+                {% csrf_token %}
+                {% if form.non_field_errors %}
+                  <div class="alert alert-danger py-2">{{ form.non_field_errors }}</div>
+                {% endif %}
+                <div class="mb-3">
+                  <label class="form-label" for="{{ form.password.id_for_label }}">{{ form.password.label }}</label>
+                  {{ form.password }}
+                  {% for error in form.password.errors %}
+                    <div class="text-danger small">{{ error }}</div>
+                  {% endfor %}
+                </div>
+                <button class="btn btn-danger w-100" type="submit">Borrar datos e iniciar semestre nuevo</button>
+                <a class="btn btn-outline-secondary w-100 mt-2" href="{% url 'admin-monitors' %}">Cancelar</a>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+{% endblock %}

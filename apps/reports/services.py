@@ -42,7 +42,7 @@ from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-from apps.common.choices import DepartmentChoices
+from apps.common.choices import DepartmentChoices, SessionStateChoices
 from apps.common.events import DomainEvent, event_bus
 from apps.common.utils import normalize_text
 from apps.reports.events import REPORT_GENERATED
@@ -253,6 +253,47 @@ def _lateness_observation(session) -> str:
     return f"LLEGO A LAS {_format_time(actual_start)} ({delay} TARDE)"
 
 
+def _lateness_sessions_for_memorandum(*, monitor, late_count: int):
+    """Retorna solo retardos reales para el detalle del memorando."""
+    from apps.work_sessions.models import WorkSession
+
+    sessions = []
+    candidates = (
+        WorkSession.objects.select_related("monitor", "schedule")
+        .filter(monitor=monitor, is_late=True)
+        .exclude(session_state=SessionStateChoices.INVALID)
+        .order_by("-work_day", "-actual_start")
+    )
+    for session in candidates.iterator():
+        if not _counts_for_lateness_memorandum(session):
+            continue
+        sessions.append(session)
+        if len(sessions) >= late_count:
+            break
+    sessions.reverse()
+    return sessions
+
+
+def _unexcused_lateness_count(*, monitor) -> int:
+    from apps.work_sessions.models import WorkSession
+
+    candidates = (
+        WorkSession.objects.select_related("monitor")
+        .filter(monitor=monitor, is_late=True, lateness_excused=False)
+        .exclude(session_state=SessionStateChoices.INVALID)
+    )
+    return sum(1 for session in candidates.iterator() if _counts_for_lateness_memorandum(session))
+
+
+def _counts_for_lateness_memorandum(session) -> bool:
+    from apps.schedules.selectors import lateness_exception_for
+
+    return (
+        not session.lateness_excused
+        and lateness_exception_for(monitor=session.monitor, day=session.work_day) is None
+    )
+
+
 def _deliver_lateness_memorandum_email(
     *,
     monitor,
@@ -276,6 +317,18 @@ def _deliver_lateness_memorandum_email(
     )
     message.attach(filename, pdf_bytes, "application/pdf")
     message.send(fail_silently=False)
+
+
+def refresh_lateness_memorandum_pdf(*, memorandum: MonitorMemorandum) -> tuple[str, bytes]:
+    """Regenera el PDF de un memorando usando las excepciones vigentes."""
+
+    monitor = memorandum.monitor
+    late_count = memorandum.late_count_threshold
+    filename = _memorandum_filename(monitor=monitor, late_count=late_count)
+    pdf_bytes = generate_lateness_memorandum_pdf(monitor=monitor, late_count=late_count)
+    memorandum.pdf_file.save(filename, ContentFile(pdf_bytes), save=False)
+    memorandum.save(update_fields=["pdf_file", "updated_at"])
+    return filename, pdf_bytes
 
 
 def _load_logo() -> ImageReader | None:
@@ -307,8 +360,6 @@ def _load_logo() -> ImageReader | None:
 def generate_lateness_memorandum_pdf(*, monitor, late_count: int) -> bytes:
     """Genera el PDF de memorando por llegadas tarde con el diseño oficial
     de la Universidad Distrital Francisco José de Caldas."""
-    from apps.work_sessions.models import WorkSession
- 
     buffer = BytesIO()
  
     LEFT   = 1.8 * cm
@@ -384,13 +435,7 @@ def generate_lateness_memorandum_pdf(*, monitor, late_count: int) -> bytes:
     memorandum_number = late_count // MEMORANDUM_LATE_THRESHOLD
     current_date = timezone.localdate()
  
-    sessions = list(
-        WorkSession.objects.select_related("schedule")
-        .filter(monitor=monitor, is_late=True)
-        .exclude(session_state="invalid")
-        .order_by("-work_day", "-actual_start")[:late_count]
-    )
-    sessions.reverse()
+    sessions = _lateness_sessions_for_memorandum(monitor=monitor, late_count=late_count)
  
     def _session_subject(session) -> str:
         schedule = session.schedule
@@ -624,17 +669,7 @@ def send_lateness_memorandum(*, memorandum: MonitorMemorandum) -> MonitorMemoran
         raise ValidationError("El monitor no tiene correo registrado para enviar el memorando.")
 
     late_count = memorandum.late_count_threshold
-    filename = _memorandum_filename(monitor=monitor, late_count=late_count)
-    if memorandum.pdf_file:
-        stored_name = memorandum.pdf_file.name.rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
-        filename = stored_name or filename
-        with memorandum.pdf_file.open("rb") as handle:
-            pdf_bytes = handle.read()
-        update_fields = ["sent_to", "sent_at", "updated_at"]
-    else:
-        pdf_bytes = generate_lateness_memorandum_pdf(monitor=monitor, late_count=late_count)
-        memorandum.pdf_file.save(filename, ContentFile(pdf_bytes), save=False)
-        update_fields = ["sent_to", "sent_at", "pdf_file", "updated_at"]
+    filename, pdf_bytes = refresh_lateness_memorandum_pdf(memorandum=memorandum)
 
     _deliver_lateness_memorandum_email(
         monitor=monitor,
@@ -646,7 +681,7 @@ def send_lateness_memorandum(*, memorandum: MonitorMemorandum) -> MonitorMemoran
     )
     memorandum.sent_to = email
     memorandum.sent_at = timezone.now()
-    memorandum.save(update_fields=update_fields)
+    memorandum.save(update_fields=["sent_to", "sent_at", "updated_at"])
     return memorandum
 
 
@@ -665,6 +700,7 @@ def create_and_send_lateness_memorandum(*, monitor, late_count: int) -> MonitorM
         MonitorMemorandum | None: Memorando creado, o ``None`` si no aplica.
     """
 
+    late_count = _unexcused_lateness_count(monitor=monitor)
     if late_count < MEMORANDUM_LATE_THRESHOLD or late_count % MEMORANDUM_LATE_THRESHOLD != 0:
         return None
 
@@ -676,6 +712,7 @@ def create_and_send_lateness_memorandum(*, monitor, late_count: int) -> MonitorM
         defaults={"sent_to": email},
     )
     if not created:
+        refresh_lateness_memorandum_pdf(memorandum=memorandum)
         return None
 
     pdf_bytes = generate_lateness_memorandum_pdf(monitor=monitor, late_count=late_count)

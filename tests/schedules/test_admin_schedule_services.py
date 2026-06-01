@@ -7,6 +7,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from openpyxl import Workbook
 
 from apps.common.choices import DepartmentChoices, UserRoleChoices
+from apps.schedules.forms import ScheduleForm
 from apps.schedules.models import Schedule
 from apps.schedules.services import import_schedule_rows_from_workbook, save_schedule
 from tests.factories import MonitorFactory, UserFactory
@@ -123,3 +124,53 @@ def test_import_schedule_rows_accepts_spanish_headers():
     assert schedule.weekday == Schedule.Weekday.TUESDAY
     assert schedule.asignatura == "Programacion"
     assert schedule.proyecto_curricular == "ingenieria_sistemas"
+
+
+@pytest.mark.django_db
+def test_schedule_form_uses_numeric_military_time_inputs():
+    monitor = MonitorFactory()
+    form = ScheduleForm(monitors=monitor.__class__.objects.filter(pk=monitor.pk))
+
+    assert form.fields["start_time"].widget.input_type == "time"
+    assert form.fields["start_time"].widget.attrs["placeholder"] == "HH:MM"
+    assert form.fields["start_time"].widget.attrs["step"] == "60"
+    assert form.fields["end_time"].widget.attrs["lang"] == "es-CO"
+
+
+@pytest.mark.django_db
+def test_schedule_form_renders_existing_times_in_military_format():
+    monitor = MonitorFactory()
+    schedule = Schedule.objects.create(
+        monitor=monitor,
+        weekday=Schedule.Weekday.MONDAY,
+        start_time=time(18),
+        end_time=time(22),
+        location="Lab A",
+    )
+    form = ScheduleForm(instance=schedule, monitors=monitor.__class__.objects.filter(pk=monitor.pk))
+
+    assert 'value="18:00"' in form["start_time"].as_widget()
+    assert 'value="22:00"' in form["end_time"].as_widget()
+
+
+@pytest.mark.django_db
+def test_schedule_form_rejects_am_pm_times():
+    monitor = MonitorFactory()
+    form = ScheduleForm(
+        data={
+            "monitor": str(monitor.id),
+            "weekday": str(Schedule.Weekday.MONDAY),
+            "start_time": "6:00 PM",
+            "end_time": "22:00",
+            "asignatura": "",
+            "grupo": "",
+            "docente": "",
+            "proyecto_curricular": "",
+            "location": "Lab A",
+            "is_active": "on",
+        },
+        monitors=monitor.__class__.objects.filter(pk=monitor.pk),
+    )
+
+    assert form.is_valid() is False
+    assert "start_time" in form.errors

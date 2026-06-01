@@ -97,6 +97,40 @@ def test_process_raw_record_uses_matching_schedule_when_monitor_has_multiple_blo
 
 
 @pytest.mark.django_db
+def test_process_raw_record_sums_multiple_schedule_blocks_in_same_day():
+    monitor = MonitorFactory(full_name="Laura Valentina")
+    first_schedule = ScheduleFactory(
+        monitor=monitor,
+        weekday=3,
+        start_time=datetime(2026, 5, 14, 10, 0).time(),
+        end_time=datetime(2026, 5, 14, 12, 0).time(),
+    )
+    ScheduleFactory(
+        monitor=monitor,
+        weekday=3,
+        start_time=datetime(2026, 5, 14, 18, 0).time(),
+        end_time=datetime(2026, 5, 14, 22, 0).time(),
+    )
+    raw_record = AttendanceRawRecordFactory(
+        monitor=monitor,
+        raw_full_name=monitor.full_name,
+        work_day=datetime(2026, 5, 14).date(),
+        entry_at=timezone.make_aware(datetime(2026, 5, 14, 10, 8)),
+        exit_at=timezone.make_aware(datetime(2026, 5, 14, 21, 49)),
+    )
+
+    session = process_raw_record_to_session(raw_record=raw_record)
+
+    assert session.schedule == first_schedule
+    assert session.normalized_start.isoformat() == "10:30:00"
+    assert session.normalized_end.isoformat() == "22:00:00"
+    assert session.normal_minutes == 330
+    assert session.overtime_minutes == 360
+    assert session.late_minutes == 30
+    assert session.overtime_status == "pending"
+
+
+@pytest.mark.django_db
 def test_process_raw_record_without_overlap_does_not_pick_unrelated_schedule():
     monitor = MonitorFactory(full_name="Esteban Alexander Bautista Solano")
     ScheduleFactory(monitor=monitor, weekday=4, start_time=datetime(2026, 2, 13, 6, 0).time(), end_time=datetime(2026, 2, 13, 8, 0).time())

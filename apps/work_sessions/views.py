@@ -30,8 +30,12 @@ from apps.common.web import AdminOrLeaderRequiredMixin
 from apps.monitors.selectors import visible_monitors_for_user
 from apps.schedules.models import Schedule
 from apps.work_sessions.models import WorkSession
-from apps.work_sessions.selectors import pending_overtime_sessions_for_user
-from apps.work_sessions.services import review_overtime
+from apps.work_sessions.selectors import (
+    invalidated_sessions_for_user,
+    pending_overtime_sessions_for_user,
+    visible_sessions_for_user,
+)
+from apps.work_sessions.services import invalidate_work_session, review_overtime
 
 class OvertimeReviewListView(AdminOrLeaderRequiredMixin, TemplateView):
     template_name = "work_sessions/overtime_review.html"
@@ -183,6 +187,7 @@ class InconsistencyManagementView(AdminOrLeaderRequiredMixin, TemplateView):
                 "attendance_inconsistencies": attendance_inconsistencies,
                 "inconsistency_rows": inconsistency_rows,
                 "recent_inconsistency_events": recent_inconsistency_events,
+                "invalidated_sessions": invalidated_sessions_for_user(self.request.user).order_by("-invalidated_at")[:20],
                 "resolved_duplicate_inconsistencies": resolved_duplicate_inconsistencies,
                 "monitor_options": visible_monitors_for_user(self.request.user).filter(is_active=True).order_by("full_name"),
                 "stats": {
@@ -202,6 +207,19 @@ class InconsistencyManagementView(AdminOrLeaderRequiredMixin, TemplateView):
             try:
                 assign_monitor_manually(raw_record=raw_record, monitor=monitor, actor=request.user)
                 messages.success(request, "Registro conciliado y reprocesado.")
+            except ValidationError as exc:
+                messages.error(request, "; ".join(exc.messages))
+            return redirect("inconsistencies-manage")
+
+        if action == "invalidate_session":
+            session = get_object_or_404(visible_sessions_for_user(request.user), pk=request.POST.get("session_id"))
+            try:
+                invalidate_work_session(
+                    session=session,
+                    actor=request.user,
+                    reason=request.POST.get("reason", ""),
+                )
+                messages.success(request, "Registro invalidado correctamente.")
             except ValidationError as exc:
                 messages.error(request, "; ".join(exc.messages))
             return redirect("inconsistencies-manage")
@@ -245,3 +263,6 @@ class InconsistencyManagementView(AdminOrLeaderRequiredMixin, TemplateView):
             except ValidationError as exc:
                 messages.error(request, "; ".join(exc.messages))
             return redirect("inconsistencies-manage")
+
+        messages.error(request, "Accion no reconocida.")
+        return redirect("inconsistencies-manage")

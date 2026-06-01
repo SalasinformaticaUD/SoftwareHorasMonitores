@@ -110,7 +110,6 @@
               <span class="badge text-bg-light">{{ day_group.sessions|length }} registros</span>
               <span class="badge text-bg-light">Normales: {{ day_group.normal_minutes|minutes_to_hours }} h</span>
               <span class="badge text-bg-light">Extra: {{ day_group.overtime_minutes|minutes_to_hours }} h</span>
-              <span class="badge text-bg-light">Ajuste: {{ day_group.adjustment_minutes|minutes_to_hours }} h</span>
               <span class="badge text-bg-light">Retraso: {{ day_group.late_minutes|minutes_to_hours }} h</span>
             </div>
 
@@ -126,7 +125,6 @@
                     <th>Salida</th>
                     <th>Normales (h)</th>
                     <th>Extra (h)</th>
-                    <th>Ajuste (h)</th>
                     <th>Retraso (h)</th>
                     <th>Estado extra</th>
                   </tr>
@@ -150,15 +148,6 @@
                       </td>
                       <td>{{ session.normal_minutes|minutes_to_hours }}</td>
                       <td>{{ session.overtime_minutes|minutes_to_hours }}</td>
-                      <td>
-                        {% if session.adjustment_minutes > 0 %}
-                          <span class="badge text-bg-success">+{{ session.adjustment_minutes|minutes_to_hours }} h</span>
-                        {% elif session.adjustment_minutes < 0 %}
-                          <span class="badge text-bg-danger">{{ session.adjustment_minutes|minutes_to_hours }} h</span>
-                        {% else %}
-                          <span class="text-muted">0 h</span>
-                        {% endif %}
-                      </td>
                       <td>
                         {{ session.late_minutes|minutes_to_hours }}
                         {% if session.lateness_excused %}

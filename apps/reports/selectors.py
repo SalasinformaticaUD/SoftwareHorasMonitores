@@ -23,6 +23,7 @@ from apps.common.choices import DepartmentChoices
 from apps.common.choices import OvertimeStatusChoices, SessionStateChoices, UserRoleChoices
 from apps.monitors.selectors import active_monitor_by_code, visible_monitors_for_user
 from apps.notifications.selectors import visible_notifications_for_user
+from apps.schedules.selectors import schedules_for_monitor_and_day
 from apps.work_sessions.models import WorkSession
 
 MEMORANDUM_THRESHOLD = 3
@@ -150,6 +151,61 @@ def _append_segment(segments: list[dict], segment) -> None:
         segments.append(segment)
 
 
+def _schedules_for_timeline(session) -> list:
+    schedules = [
+        schedule
+        for schedule in schedules_for_monitor_and_day(monitor=session.monitor, day=session.work_day)
+        if schedule.start_time < session.actual_end and schedule.end_time > session.actual_start
+    ]
+    if schedules:
+        return schedules
+    return [session.schedule] if session.schedule else []
+
+
+def _append_session_segments(*, session, schedules, punch_segments: list[dict]) -> None:
+    cursor = session.actual_start
+    overtime_kind = _overtime_kind(session)
+
+    for schedule in schedules:
+        if cursor < schedule.start_time:
+            _append_segment(
+                punch_segments,
+                _timeline_segment(
+                    label="Horas extra",
+                    start_time=cursor,
+                    end_time=min(schedule.start_time, session.actual_end),
+                    kind=overtime_kind,
+                    detail=session.get_overtime_status_display(),
+                ),
+            )
+
+        normal_start = max(session.actual_start, schedule.start_time)
+        normal_end = min(session.actual_end, schedule.end_time)
+        _append_segment(
+            punch_segments,
+            _timeline_segment(
+                label="Horas normales",
+                start_time=normal_start,
+                end_time=normal_end,
+                kind="normal",
+                detail=f"{_minutes_to_hours(session.normal_minutes)} h",
+            ),
+        )
+        cursor = max(cursor, schedule.end_time)
+
+    if cursor < session.actual_end:
+        _append_segment(
+            punch_segments,
+            _timeline_segment(
+                label="Horas extra",
+                start_time=cursor,
+                end_time=session.actual_end,
+                kind=overtime_kind,
+                detail=session.get_overtime_status_display(),
+            ),
+        )
+
+
 def _has_overtime_state(session) -> bool:
     """Determina si una sesion tiene horas extra con estado visible.
 
@@ -181,54 +237,20 @@ def _build_session_timeline(session) -> dict:
     validation_segments: list[dict] = []
     markers = []
 
-    if session.schedule:
-        _append_segment(
-            schedule_segments,
-            _timeline_segment(
-                label="Horario programado",
-                start_time=session.schedule.start_time,
-                end_time=session.schedule.end_time,
-                kind="schedule",
-                detail=session.schedule.location or "Sin ubicacion",
-            ),
-        )
-
-        normal_start = max(session.actual_start, session.schedule.start_time)
-        normal_end = min(session.actual_end, session.schedule.end_time)
-        _append_segment(
-            punch_segments,
-            _timeline_segment(
-                label="Horas normales",
-                start_time=normal_start,
-                end_time=normal_end,
-                kind="normal",
-                detail=f"{_minutes_to_hours(session.normal_minutes)} h",
-            ),
-        )
-
-        overtime_kind = _overtime_kind(session)
-        if session.actual_start < session.schedule.start_time:
+    schedules = _schedules_for_timeline(session)
+    if schedules:
+        for schedule in schedules:
             _append_segment(
-                punch_segments,
+                schedule_segments,
                 _timeline_segment(
-                    label="Horas extra",
-                    start_time=session.actual_start,
-                    end_time=min(session.actual_end, session.schedule.start_time),
-                    kind=overtime_kind,
-                    detail=session.get_overtime_status_display(),
+                    label="Horario programado",
+                    start_time=schedule.start_time,
+                    end_time=schedule.end_time,
+                    kind="schedule",
+                    detail=schedule.location or "Sin ubicacion",
                 ),
             )
-        if session.actual_end > session.schedule.end_time:
-            _append_segment(
-                punch_segments,
-                _timeline_segment(
-                    label="Horas extra",
-                    start_time=max(session.actual_start, session.schedule.end_time),
-                    end_time=session.actual_end,
-                    kind=overtime_kind,
-                    detail=session.get_overtime_status_display(),
-                ),
-            )
+        _append_session_segments(session=session, schedules=schedules, punch_segments=punch_segments)
     else:
         segment_kind = _overtime_kind(session) if _has_overtime_state(session) else "inconsistency"
         segment_detail = (
@@ -297,8 +319,11 @@ def _build_session_timeline(session) -> dict:
         status_label = "Retardo"
 
     schedule_label = "Sin horario asignado"
-    if session.schedule:
-        schedule_label = f"{session.schedule.start_time:%H:%M} - {session.schedule.end_time:%H:%M}"
+    if schedules:
+        schedule_label = "; ".join(
+            f"{schedule.start_time:%H:%M} - {schedule.end_time:%H:%M}"
+            for schedule in schedules
+        )
 
     return {
         "session": session,
@@ -360,12 +385,9 @@ def _build_day_timeline_row(*, work_day: date, sessions: list[WorkSession]) -> d
         markers.extend(row["markers"])
         worked_minutes += row["worked_minutes"]
 
-        if session.schedule:
-            label = f"{session.schedule.start_time:%H:%M} - {session.schedule.end_time:%H:%M}"
-        else:
-            label = "Sin horario asignado"
-        if label not in schedule_labels:
-            schedule_labels.append(label)
+        for label in row["subtitle"].split("; "):
+            if label and label not in schedule_labels:
+                schedule_labels.append(label)
 
         if _status_rank(row["status_kind"]) > _status_rank(status_kind):
             status_kind = row["status_kind"]
@@ -510,7 +532,7 @@ def aggregate_monitor_metrics(*, monitor, start_date: Optional[date] = None, end
             0,
         ),
         penalty_minutes=Coalesce(Sum("penalty_minutes"), 0),
-        late_count=Coalesce(Count("id", filter=Q(is_late=True)), 0),
+        late_count=Coalesce(Count("id", filter=Q(is_late=True, lateness_excused=False)), 0),
     )
     annotation_delta_minutes = annotations.aggregate(total=Coalesce(Sum("delta_minutes"), 0))["total"]
     total_minutes = (

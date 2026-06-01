@@ -23,7 +23,7 @@ from apps.monitors.services import (
     update_monitor_with_user,
 )
 from apps.reports.models import MonitorMemorandum
-from apps.reports.services import send_lateness_memorandum
+from apps.reports.services import refresh_lateness_memorandum_pdf, send_lateness_memorandum
 
 
 class MonitorAdminView(AdminOrLeaderRequiredMixin, TemplateView):
@@ -45,7 +45,10 @@ class MonitorAdminView(AdminOrLeaderRequiredMixin, TemplateView):
             .annotate(
                 late_arrivals_count=Count(
                     "work_sessions",
-                    filter=Q(work_sessions__is_late=True) & ~Q(work_sessions__session_state="invalid"),
+                    filter=(
+                        Q(work_sessions__is_late=True, work_sessions__lateness_excused=False)
+                        & ~Q(work_sessions__session_state="invalid")
+                    ),
                     distinct=True,
                 ),
                 memorandums_count=Count("memorandums", distinct=True),
@@ -248,6 +251,10 @@ class MonitorMemorandumDownloadView(AdminOrLeaderRequiredMixin, View):
             MonitorMemorandum.objects.filter(monitor=monitor),
             pk=kwargs["memorandum_id"],
         )
+        try:
+            refresh_lateness_memorandum_pdf(memorandum=memorandum)
+        except ValidationError as exc:
+            raise Http404("; ".join(exc.messages)) from exc
         if not memorandum.pdf_file:
             raise Http404("El memorando no tiene PDF asociado.")
         try:

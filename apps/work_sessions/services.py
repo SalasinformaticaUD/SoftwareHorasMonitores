@@ -22,7 +22,12 @@ from apps.common.utils import (
     normalize_session_start,
     overlap_in_minutes,
 )
-from apps.schedules.selectors import lateness_exception_for, overtime_exception_for, schedule_for_monitor_and_day
+from apps.schedules.selectors import (
+    lateness_exception_for,
+    overtime_exception_for,
+    schedule_for_monitor_and_day,
+    schedules_overlapping_session,
+)
 from apps.work_sessions.events import OVERTIME_PENDING, OVERTIME_REVIEWED, SESSION_PROCESSED
 from apps.work_sessions.models import WorkSession
 
@@ -73,6 +78,13 @@ def _resolve_overtime_exception(*, monitor, work_day, overtime_minutes):
         return OvertimeStatusChoices.APPROVED, True, overtime_exception
 
     return OvertimeStatusChoices.PENDING, False, None
+
+
+def _normal_minutes_for_schedules(*, start_time, end_time, schedules) -> int:
+    return sum(
+        overlap_in_minutes(start_time, end_time, schedule.start_time, schedule.end_time)
+        for schedule in schedules
+    )
 
 
 @transaction.atomic
@@ -249,6 +261,14 @@ def process_raw_record_to_session(*, raw_record):
         start_time=normalized_start,
         end_time=normalized_end,
     )
+    overlapping_schedules = schedules_overlapping_session(
+        monitor=raw_record.monitor,
+        day=raw_record.work_day,
+        start_time=normalized_start,
+        end_time=normalized_end,
+    )
+    if overlapping_schedules:
+        schedule = overlapping_schedules[0]
     total_minutes = duration_between_times(normalized_start, normalized_end)
     scheduled_start = None
     scheduled_end = None
@@ -261,7 +281,11 @@ def process_raw_record_to_session(*, raw_record):
     if schedule:
         scheduled_start = combine_day_and_time(raw_record.work_day, schedule.start_time)
         scheduled_end = combine_day_and_time(raw_record.work_day, schedule.end_time)
-        normal = overlap_in_minutes(normalized_start, normalized_end, schedule.start_time, schedule.end_time)
+        normal = _normal_minutes_for_schedules(
+            start_time=normalized_start,
+            end_time=normalized_end,
+            schedules=overlapping_schedules or [schedule],
+        )
         late, lateness_excused, lateness_exception = _resolve_lateness(
             monitor=raw_record.monitor,
             work_day=raw_record.work_day,
@@ -333,6 +357,7 @@ def process_raw_record_to_session(*, raw_record):
         late_count = WorkSession.objects.filter(
             monitor=session.monitor,
             is_late=True,
+            lateness_excused=False,
         ).exclude(session_state=SessionStateChoices.INVALID).count()
         from apps.reports.services import create_and_send_lateness_memorandum
 

@@ -1,14 +1,51 @@
-from datetime import datetime
+from datetime import date, datetime, time
 
 import pytest
 from django.core import mail
 from django.utils import timezone
 
 from apps.reports.models import MonitorMemorandum
-from apps.reports.services import _lateness_observation, send_lateness_memorandum
+from apps.reports.services import (
+    _lateness_observation,
+    _lateness_sessions_for_memorandum,
+    create_and_send_lateness_memorandum,
+    send_lateness_memorandum,
+)
 from apps.work_sessions.models import WorkSession
 from apps.work_sessions.services import process_raw_record_to_session
-from tests.factories import AttendanceRawRecordFactory, MonitorFactory, ScheduleFactory, UserFactory
+from tests.factories import (
+    AttendanceRawRecordFactory,
+    MonitorFactory,
+    ScheduleExceptionFactory,
+    ScheduleFactory,
+    UserFactory,
+    WorkSessionFactory,
+)
+
+
+def _stored_late_session(*, monitor, schedule, work_day, excused=False, exception=None):
+    raw_record = AttendanceRawRecordFactory(
+        monitor=monitor,
+        raw_full_name=monitor.full_name,
+        work_day=work_day,
+        entry_at=time(8, 10),
+        exit_at=time(12, 0),
+        event_at=timezone.make_aware(datetime.combine(work_day, time(8, 10))),
+    )
+    return WorkSessionFactory(
+        raw_record=raw_record,
+        monitor=monitor,
+        schedule=schedule,
+        work_day=work_day,
+        actual_start=time(8, 10),
+        actual_end=time(12, 0),
+        normalized_start=time(8, 30),
+        normalized_end=time(12, 0),
+        late_minutes=30,
+        is_late=True,
+        lateness_excused=excused,
+        lateness_exception=exception,
+    )
 
 
 @pytest.mark.django_db
@@ -99,6 +136,60 @@ def test_lateness_memorandum_is_created_without_email_and_can_be_resent(settings
     assert memorandum.sent_at is not None
     assert len(mail.outbox) == 1
     assert mail.outbox[0].to == [user.email]
+
+
+@pytest.mark.django_db
+def test_lateness_memorandum_sessions_ignore_excused_lateness():
+    monitor = MonitorFactory(full_name="Monitor Con Excepcion")
+    schedule = ScheduleFactory(monitor=monitor, weekday=0)
+    ScheduleExceptionFactory(
+        department=monitor.department,
+        start_date=date(2026, 4, 20),
+        end_date=date(2026, 4, 20),
+        ignore_lateness=True,
+    )
+
+    _stored_late_session(monitor=monitor, schedule=schedule, work_day=date(2026, 4, 13))
+    _stored_late_session(
+        monitor=monitor,
+        schedule=schedule,
+        work_day=date(2026, 4, 20),
+    )
+    _stored_late_session(monitor=monitor, schedule=schedule, work_day=date(2026, 4, 27))
+    _stored_late_session(monitor=monitor, schedule=schedule, work_day=date(2026, 5, 4))
+
+    sessions = _lateness_sessions_for_memorandum(monitor=monitor, late_count=3)
+
+    assert [session.work_day for session in sessions] == [
+        date(2026, 4, 13),
+        date(2026, 4, 27),
+        date(2026, 5, 4),
+    ]
+
+
+@pytest.mark.django_db
+def test_lateness_memorandum_is_not_created_when_threshold_only_includes_excused_lateness():
+    monitor = MonitorFactory(full_name="Monitor Sin Umbral Real")
+    schedule = ScheduleFactory(monitor=monitor, weekday=0)
+    ScheduleExceptionFactory(
+        department=monitor.department,
+        start_date=date(2026, 4, 20),
+        end_date=date(2026, 4, 20),
+        ignore_lateness=True,
+    )
+
+    _stored_late_session(monitor=monitor, schedule=schedule, work_day=date(2026, 4, 13))
+    _stored_late_session(
+        monitor=monitor,
+        schedule=schedule,
+        work_day=date(2026, 4, 20),
+    )
+    _stored_late_session(monitor=monitor, schedule=schedule, work_day=date(2026, 4, 27))
+
+    memorandum = create_and_send_lateness_memorandum(monitor=monitor, late_count=3)
+
+    assert memorandum is None
+    assert MonitorMemorandum.objects.filter(monitor=monitor).count() == 0
 
 
 @pytest.mark.django_db

@@ -112,16 +112,18 @@ class PublicMonitorLookupAPIView(views.APIView):
             "metrics": result["metrics"],
             "recent_sessions": [
                 {
-                    "work_day": session.work_day,
-                    "actual_start": session.actual_start,
-                    "actual_end": session.actual_end,
-                    "normal_minutes": session.normal_minutes,
-                    "overtime_minutes": session.overtime_minutes,
-                    "penalty_minutes": session.penalty_minutes,
-                    "late_minutes": session.late_minutes,
-                    "lateness_excused": session.lateness_excused,
-                    "lateness_exception_name": session.lateness_exception.name if session.lateness_exception else "",
-                    "overtime_status": session.overtime_status,
+                    "work_day": session["work_day"],
+                    "actual_start": session["actual_start"],
+                    "actual_end": session["actual_end"],
+                    "normal_minutes": session["normal_minutes"],
+                    "overtime_minutes": session["overtime_minutes"],
+                    "penalty_minutes": session.get("penalty_minutes", 0),
+                    "late_minutes": session["late_minutes"],
+                    "lateness_excused": session["lateness_excused"],
+                    "lateness_exception_name": (
+                        session["lateness_exception"].name if session["lateness_exception"] else ""
+                    ),
+                    "overtime_status": session["overtime_status"],
                 }
                 for session in result["recent_sessions"]
             ],

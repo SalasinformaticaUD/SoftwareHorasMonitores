@@ -33,6 +33,46 @@ def test_timeline_splits_schedule_normal_and_pending_overtime_segments():
 
 
 @pytest.mark.django_db
+def test_timeline_uses_multiple_schedule_blocks_for_long_session():
+    monitor = MonitorFactory(full_name="Laura Valentina")
+    morning_schedule = ScheduleFactory(
+        monitor=monitor,
+        weekday=3,
+        start_time=time(10),
+        end_time=time(12),
+        location="Lab Manana",
+    )
+    ScheduleFactory(
+        monitor=monitor,
+        weekday=3,
+        start_time=time(18),
+        end_time=time(22),
+        location="Lab Noche",
+    )
+    session = WorkSessionFactory(
+        monitor=monitor,
+        raw_record__monitor=monitor,
+        schedule=morning_schedule,
+        work_day=date(2026, 5, 14),
+        actual_start=time(10, 8),
+        actual_end=time(21, 49),
+        normal_minutes=330,
+        overtime_minutes=360,
+        overtime_status=OvertimeStatusChoices.PENDING,
+    )
+
+    row = build_session_timeline_rows([session])[0]
+
+    assert row["subtitle"] == "10:00 - 12:00; 18:00 - 22:00"
+    assert len(row["tracks"][0]["segments"]) == 2
+    assert [segment["kind"] for segment in row["tracks"][1]["segments"]] == [
+        "normal",
+        "overtime-pending",
+        "normal",
+    ]
+
+
+@pytest.mark.django_db
 def test_timeline_marks_sessions_without_schedule_as_inconsistency():
     session = WorkSessionFactory(
         schedule=None,
@@ -164,3 +204,31 @@ def test_monitor_records_template_renders_day_group_links():
     assert 'data-work-day="2026-04-30"' in html
     assert "Ver registros" in html
     assert "Linea de tiempo multinivel" in html
+
+
+@pytest.mark.django_db
+def test_monitor_self_hours_template_uses_day_group_records():
+    user = UserFactory()
+    monitor = MonitorFactory(user=user)
+    WorkSessionFactory(
+        monitor=monitor,
+        raw_record__monitor=monitor,
+        raw_record__work_day=date(2026, 4, 30),
+        work_day=date(2026, 4, 30),
+        actual_start=time(8),
+        actual_end=time(12),
+    )
+    request = RequestFactory().get("/mis-horas/?dia=2026-04-30#record-day-2026-04-30")
+    request.user = user
+    request.resolver_match = SimpleNamespace(url_name="monitor-hours")
+
+    html = render_to_string(
+        "dashboard/monitor_self_hours.html",
+        {"result": monitor_lookup_result(monitor=monitor)},
+        request=request,
+    )
+
+    assert "Registros por dia" in html
+    assert "Ver registros" in html
+    assert 'id="record-day-2026-04-30"' in html
+    assert "Historial reciente" not in html

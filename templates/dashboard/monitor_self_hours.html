@@ -169,6 +169,9 @@
     </div>
   </div>
 
+  {% include "includes/monitor_day_records.html" with result=result %}
+
+  {% comment %}
   <div class="card admin-card mt-4">
     <div class="card-body">
       <h2 class="h5 mb-1">Linea de tiempo multinivel</h2>
@@ -315,6 +318,7 @@
       </div>
     </div>
   </div>
+  {% endcomment %}
   {% else %}
   <div class="card admin-card">
     <div class="card-body">
@@ -324,6 +328,7 @@
   </div>
   {% endif %}
 </div>
+{% comment %}
 <script>
   document.addEventListener("DOMContentLoaded", function () {
     var rows = Array.from(document.querySelectorAll(".monitor-record-row"));
@@ -363,4 +368,5 @@
     renderPage(1);
   });
 </script>
+{% endcomment %}
 {% endblock %}

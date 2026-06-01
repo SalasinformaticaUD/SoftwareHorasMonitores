@@ -209,6 +209,39 @@
 
   <div class="card admin-card mb-4">
     <div class="card-body">
+      <h2 class="h5 mb-1">Historial de invalidaciones</h2>
+      <p class="text-muted small mb-3">Registros procesados que fueron invalidados administrativamente.</p>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle">
+          <thead>
+            <tr>
+              <th>Fecha invalidacion</th>
+              <th>Fecha registro</th>
+              <th>Monitor</th>
+              <th>Motivo</th>
+              <th>Usuario</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for session in invalidated_sessions %}
+              <tr>
+                <td>{{ session.invalidated_at|date:"Y-m-d H:i" }}</td>
+                <td>{{ session.work_day|date:"Y-m-d" }}</td>
+                <td>{{ session.monitor.full_name }}</td>
+                <td>{{ session.invalidation_reason }}</td>
+                <td>{{ session.invalidated_by.display_name|default:"Sistema" }}</td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="5"><div class="empty-state">Sin historial de invalidaciones.</div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card admin-card mb-4">
+    <div class="card-body">
       <h2 class="h5 mb-1">Historial de inconsistencias</h2>
       <p class="text-muted small mb-3">Ultimas acciones automaticas y administrativas realizadas sobre errores de marcacion.</p>
       <div class="table-responsive">

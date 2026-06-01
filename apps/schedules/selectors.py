@@ -9,13 +9,7 @@ from apps.schedules.models import Schedule, ScheduleException
 
 
 def schedule_for_monitor_and_day(monitor, day: date, start_time=None, end_time=None) -> Optional[Schedule]:
-    schedules = list(
-        Schedule.objects.filter(
-            monitor=monitor,
-            weekday=day.weekday(),
-            is_active=True,
-        ).order_by("start_time")
-    )
+    schedules = schedules_for_monitor_and_day(monitor=monitor, day=day)
     if not schedules:
         return None
     if start_time is None or end_time is None:
@@ -29,6 +23,24 @@ def schedule_for_monitor_and_day(monitor, day: date, start_time=None, end_time=N
             best_schedule = schedule
             best_overlap = overlap
     return best_schedule if best_overlap > 0 else None
+
+
+def schedules_for_monitor_and_day(*, monitor, day: date) -> list[Schedule]:
+    return list(
+        Schedule.objects.filter(
+            monitor=monitor,
+            weekday=day.weekday(),
+            is_active=True,
+        ).order_by("start_time")
+    )
+
+
+def schedules_overlapping_session(*, monitor, day: date, start_time, end_time) -> list[Schedule]:
+    return [
+        schedule
+        for schedule in schedules_for_monitor_and_day(monitor=monitor, day=day)
+        if overlap_in_minutes(start_time, end_time, schedule.start_time, schedule.end_time) > 0
+    ]
 
 
 def _active_exception_queryset(*, monitor, day: date):

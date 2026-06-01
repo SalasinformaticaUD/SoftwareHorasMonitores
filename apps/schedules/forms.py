@@ -30,6 +30,40 @@ class ScheduleBulkUploadForm(forms.Form):
 
 class ScheduleForm(forms.ModelForm):
     weekday = forms.ChoiceField(label="Dia", choices=Schedule.Weekday.choices[:6])
+    start_time = forms.TimeField(
+        label="Hora inicio",
+        input_formats=["%H:%M", "%H:%M:%S"],
+        widget=forms.TimeInput(
+            format="%H:%M",
+            attrs={
+                "type": "time",
+                "placeholder": "HH:MM",
+                "min": "00:00",
+                "max": "23:59",
+                "step": "60",
+                "lang": "es-CO",
+                "autocomplete": "off",
+            }
+        ),
+        error_messages={"invalid": "Usa hora militar en formato HH:MM, por ejemplo 18:00."},
+    )
+    end_time = forms.TimeField(
+        label="Hora fin",
+        input_formats=["%H:%M", "%H:%M:%S"],
+        widget=forms.TimeInput(
+            format="%H:%M",
+            attrs={
+                "type": "time",
+                "placeholder": "HH:MM",
+                "min": "00:00",
+                "max": "23:59",
+                "step": "60",
+                "lang": "es-CO",
+                "autocomplete": "off",
+            }
+        ),
+        error_messages={"invalid": "Usa hora militar en formato HH:MM, por ejemplo 22:00."},
+    )
 
     class Meta:
         model = Schedule
@@ -45,10 +79,6 @@ class ScheduleForm(forms.ModelForm):
             "location",
             "is_active",
         )
-        widgets = {
-            "start_time": forms.TimeInput(format="%H:%M", attrs={"type": "time"}),
-            "end_time": forms.TimeInput(format="%H:%M", attrs={"type": "time"}),
-        }
         labels = {
             "monitor": "Monitor",
             "weekday": "Dia",
@@ -64,8 +94,6 @@ class ScheduleForm(forms.ModelForm):
 
     def __init__(self, *args, monitors=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["start_time"].input_formats = ["%H:%M", "%H:%M:%S"]
-        self.fields["end_time"].input_formats = ["%H:%M", "%H:%M:%S"]
         self.fields["monitor"].queryset = monitors or Monitor.objects.filter(is_active=True).order_by("full_name")
         self.fields["proyecto_curricular"].choices = (("", "Seleccione un proyecto curricular"), *PROJECT_CHOICES)
         for field in self.fields.values():

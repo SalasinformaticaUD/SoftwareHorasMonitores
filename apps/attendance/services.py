@@ -98,6 +98,24 @@ def _rewind_uploaded_file(uploaded_file) -> None:
         uploaded_file.seek(0)
 
 
+def _get_import_worksheet(workbook):
+    """Obtiene una hoja legible del libro o falla con un error de validacion."""
+    worksheet = workbook.active
+    if worksheet is not None:
+        return worksheet
+
+    worksheets = getattr(workbook, "worksheets", [])
+    if worksheets:
+        return worksheets[0]
+
+    raise ValidationError(
+        "El archivo Excel no tiene hojas legibles para el sistema. "
+        "Esto puede pasar cuando el archivo se guarda o se convierte desde otro formato, "
+        "por ejemplo Excel Strict Open XML. Abre el archivo en Excel y guardalo nuevamente "
+        "como Libro de Excel (*.xlsx)."
+    )
+
+
 def _department_label(value: str) -> str:
     """Obtiene la etiqueta humana de una dependencia.
 
@@ -147,7 +165,7 @@ def _preview_workbook_departments(uploaded_file) -> tuple[set[str], dict[int, st
     try:
         _rewind_uploaded_file(uploaded_file)
         workbook = load_workbook(uploaded_file, read_only=True, data_only=True)
-        worksheet = workbook.active
+        worksheet = _get_import_worksheet(workbook)
         rows = worksheet.iter_rows(values_only=True)
         headers = next(rows, None)
         if not headers:
@@ -933,13 +951,14 @@ def import_workbook(job: AttendanceImportJob) -> AttendanceImportJob:
     job.error_message = ""
     job.save(update_fields=["status", "started_at", "error_message", "updated_at"])
 
+    workbook = None
     try:
         workbook = load_workbook(job.source_file.path, read_only=True, data_only=True)
-        worksheet = workbook.active
+        worksheet = _get_import_worksheet(workbook)
         rows = worksheet.iter_rows(values_only=True)
         headers = next(rows, None)
         if not headers:
-            raise ValueError("El archivo está vacío.")
+            raise ValidationError("El archivo esta vacio.")
         attendance_format, header_map = resolve_attendance_headers([str(item) for item in headers])
 
         imported_rows = 0
@@ -1096,6 +1115,13 @@ def import_workbook(job: AttendanceImportJob) -> AttendanceImportJob:
             )
         )
         return job
+    except ValidationError as exc:
+        job.status = ImportJobStatusChoices.FAILED
+        job.finished_at = timezone.now()
+        job.error_message = "; ".join(exc.messages)
+        job.save(update_fields=["status", "finished_at", "error_message", "updated_at"])
+        logger.warning("attendance_import_validation_failed job=%s error=%s", job.id, job.error_message)
+        raise
     except Exception as exc:
         job.status = ImportJobStatusChoices.FAILED
         job.finished_at = timezone.now()
@@ -1103,6 +1129,9 @@ def import_workbook(job: AttendanceImportJob) -> AttendanceImportJob:
         job.save(update_fields=["status", "finished_at", "error_message", "updated_at"])
         logger.exception("attendance_import_failed job=%s error=%s", job.id, exc)
         raise
+    finally:
+        if workbook is not None:
+            workbook.close()
 
 @transaction.atomic
 def reject_raw_record(*, raw_record: AttendanceRawRecord, actor, reason: str) -> AttendanceRawRecord:

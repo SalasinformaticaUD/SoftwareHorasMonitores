@@ -1,13 +1,17 @@
 from datetime import date, datetime, time
+from unittest.mock import Mock, patch
 
 import pytest
+from django.contrib.messages import get_messages
 from django.core.exceptions import ValidationError
+from django.urls import reverse
 
 from apps.attendance.models import AttendanceRawRecord
 from apps.attendance.services import create_import_job, import_workbook
 from apps.common.choices import (
     AttendancePairingStatusChoices,
     DepartmentChoices,
+    ImportJobStatusChoices,
     OvertimeStatusChoices,
     ReconciliationStatusChoices,
 )
@@ -55,6 +59,57 @@ def build_croschex_file(*, rows):
 
 def build_raw_attendance_file(*, rows):
     return build_excel_file(headers=VALID_RAW_ATTENDANCE_HEADERS, rows=rows)
+
+
+@pytest.mark.django_db
+def test_import_workbook_marks_job_failed_when_required_headers_are_missing():
+    uploader = AdminUserFactory()
+    excel_file = build_excel_file(
+        headers=["Departamento", "Nombre", "Fecha/Hora"],
+        rows=[["Monitores Fisica", "Ana Torres", datetime(2026, 4, 13, 8, 0)]],
+    )
+    job = create_import_job(uploaded_file=excel_file, uploaded_by=uploader)
+
+    with pytest.raises(ValidationError, match="Encabezados faltantes"):
+        import_workbook(job)
+
+    job.refresh_from_db()
+    assert job.status == ImportJobStatusChoices.FAILED
+    assert "Encabezados faltantes" in job.error_message
+
+
+@pytest.mark.django_db
+def test_import_workbook_marks_job_failed_when_workbook_has_no_readable_sheet():
+    uploader = AdminUserFactory()
+    excel_file = build_croschex_file(rows=[])
+    job = create_import_job(uploaded_file=excel_file, uploaded_by=uploader)
+    workbook = Mock(active=None, worksheets=[])
+
+    with patch("apps.attendance.services.load_workbook", return_value=workbook):
+        with pytest.raises(ValidationError, match="se guarda o se convierte desde otro formato"):
+            import_workbook(job)
+
+    job.refresh_from_db()
+    assert job.status == ImportJobStatusChoices.FAILED
+    assert "se guarda o se convierte desde otro formato" in job.error_message
+    workbook.close.assert_called_once()
+
+
+@pytest.mark.django_db
+def test_attendance_upload_returns_redirect_with_message_for_invalid_headers(client):
+    uploader = AdminUserFactory()
+    client.force_login(uploader)
+    excel_file = build_excel_file(
+        headers=["Departamento", "Nombre", "Fecha/Hora"],
+        rows=[["Monitores Fisica", "Ana Torres", datetime(2026, 4, 13, 8, 0)]],
+    )
+
+    response = client.post(reverse("attendance-upload"), {"file": excel_file})
+
+    assert response.status_code == 302
+    assert response.url == reverse("attendance-upload")
+    messages = [str(message) for message in get_messages(response.wsgi_request)]
+    assert any("Encabezados faltantes" in message for message in messages)
 
 
 @pytest.mark.django_db

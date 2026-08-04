@@ -20,3 +20,8 @@ FROM schedules_schedule s
 INNER JOIN monitors_monitor m ON s.monitor_id = m.id
 INNER JOIN users_user u ON m.user_id = u.id
 WHERE s.is_active = true
+
+
+
+
+SELECT * FROM monitors_monitor WHERE id = '60611ec1-02d3-4739-84da-cfb87eecab43'

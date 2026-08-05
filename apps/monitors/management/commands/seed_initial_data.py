@@ -6,6 +6,7 @@ from django.core.management.base import BaseCommand
 
 from apps.common.choices import DepartmentChoices, UserRoleChoices
 from apps.monitors.models import Monitor
+from apps.monitors.services import get_current_semester
 from apps.schedules.services import upsert_schedule
 
 User = get_user_model()
@@ -16,6 +17,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         password = os.getenv("SEED_DEFAULT_PASSWORD", "ChangeMe123!")
+        semester = get_current_semester()
         created_count = 0
         updated_count = 0
 
@@ -93,6 +95,7 @@ class Command(BaseCommand):
 
         for code, name, department in monitors:
             monitor, created = Monitor.objects.update_or_create(
+                semester=semester,
                 codigo_estudiante=code,
                 defaults={
                     "full_name": name,

@@ -70,19 +70,19 @@
         <span>Administracion</span><span>/</span><strong>Iniciar semestre nuevo</strong>
       </div>
       <h1>Iniciar semestre nuevo</h1>
-      <p class="mb-0 mt-2">Esta accion limpia los datos operativos del semestre actual para registrar nuevos monitores y nuevos registros.</p>
+      <p class="mb-0 mt-2">Esta accion archiva el semestre actual y abre un semestre nuevo para registrar monitores, horarios y marcaciones nuevas.</p>
     </div>
 
     <div class="semester-reset-body">
       <div class="semester-reset-important mb-4">
-        Mensaje importante: esta accion no se puede deshacer desde la aplicacion. Antes de continuar, verifica que ya tengas una copia de seguridad o los exportes necesarios del semestre actual.
+        Mensaje importante: los registros del semestre actual se conservan como historico. Los monitores actuales quedaran inactivos para que el nuevo semestre empiece sin conflictos.
       </div>
 
       <div class="row g-4">
         <div class="col-lg-7">
-          <h2 class="h5">Que se va a borrar</h2>
-          <p class="text-muted">Se eliminaran monitores, cuentas de usuarios monitor, horarios, registros importados, jornadas procesadas, horas extra, anotaciones, inconsistencias, memorandos, reportes, excepciones y notificaciones.</p>
-          <p class="text-muted mb-3">Se conservan los usuarios administradores y lideres para que puedas seguir entrando al sistema.</p>
+          <h2 class="h5">Que se va a archivar</h2>
+          <p class="text-muted">Se conservaran monitores, horarios, registros importados, jornadas procesadas, horas extra, anotaciones, inconsistencias, memorandos y reportes para consulta historica.</p>
+          <p class="text-muted mb-3">Las cuentas de monitor se conservan. Si un monitor repite, podra tener un nuevo registro activo sin perder el semestre anterior.</p>
 
           <div class="semester-reset-grid">
             {% for row in count_rows %}
@@ -98,7 +98,7 @@
           <div class="card admin-card">
             <div class="card-body">
               <h2 class="h5 mb-2">Confirmacion obligatoria</h2>
-              <p class="text-muted small">Para confirmar que eres tu, escribe nuevamente tu contrasena de administrador.</p>
+              <p class="text-muted small">Ingresa el semestre que empieza y confirma con tu contrasena de administrador.</p>
 
               <form method="post" novalidate>
                 {% csrf_token %}
@@ -106,13 +106,23 @@
                   <div class="alert alert-danger py-2">{{ form.non_field_errors }}</div>
                 {% endif %}
                 <div class="mb-3">
+                  <label class="form-label" for="{{ form.new_semester_name.id_for_label }}">{{ form.new_semester_name.label }}</label>
+                  {{ form.new_semester_name }}
+                  {% if form.new_semester_name.help_text %}
+                    <div class="form-text">{{ form.new_semester_name.help_text }}</div>
+                  {% endif %}
+                  {% for error in form.new_semester_name.errors %}
+                    <div class="text-danger small">{{ error }}</div>
+                  {% endfor %}
+                </div>
+                <div class="mb-3">
                   <label class="form-label" for="{{ form.password.id_for_label }}">{{ form.password.label }}</label>
                   {{ form.password }}
                   {% for error in form.password.errors %}
                     <div class="text-danger small">{{ error }}</div>
                   {% endfor %}
                 </div>
-                <button class="btn btn-danger w-100" type="submit">Borrar datos e iniciar semestre nuevo</button>
+                <button class="btn btn-danger w-100" type="submit">Archivar e iniciar semestre nuevo</button>
                 <a class="btn btn-outline-secondary w-100 mt-2" href="{% url 'admin-monitors' %}">Cancelar</a>
               </form>
             </div>

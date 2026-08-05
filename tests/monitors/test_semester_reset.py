@@ -4,7 +4,7 @@ from django.urls import reverse
 from apps.annotations.models import Annotation
 from apps.attendance.models import AttendanceImportJob
 from apps.common.choices import DepartmentChoices, UserRoleChoices
-from apps.monitors.models import Monitor
+from apps.monitors.models import AcademicSemester, Monitor
 from apps.reports.models import MonitorMemorandum
 from apps.schedules.models import ScheduleException
 from apps.work_sessions.models import WorkSession
@@ -58,7 +58,7 @@ def test_semester_reset_rejects_wrong_password_and_keeps_data(client):
     assert Monitor.objects.filter(pk=monitor.pk).exists()
 
 
-def test_semester_reset_deletes_operational_data_and_preserves_admins_and_leaders(client):
+def test_semester_reset_archives_operational_data_and_preserves_monitor_accounts(client):
     admin = AdminUserFactory(username="admin-reset")
     leader = UserFactory(username="leader-reset", department=DepartmentChoices.PHYSICS)
     monitor_user = UserFactory(
@@ -76,16 +76,24 @@ def test_semester_reset_deletes_operational_data_and_preserves_admins_and_leader
     MonitorMemorandum.objects.create(monitor=monitor, late_count_threshold=3, sent_to=monitor_user.email)
 
     client.force_login(admin)
-    response = client.post(reverse("admin-semester-reset"), {"password": "ChangeMe123!"})
+    response = client.post(
+        reverse("admin-semester-reset"),
+        {"new_semester_name": "2026-3", "password": "ChangeMe123!"},
+    )
 
     assert response.status_code == 302
     assert response.url == reverse("admin-monitors")
-    assert Monitor.objects.count() == 0
-    assert User.objects.filter(role=UserRoleChoices.MONITOR).count() == 0
+    monitor.refresh_from_db()
+    assert monitor.is_active is False
+    assert Monitor.objects.count() == 1
+    assert User.objects.filter(role=UserRoleChoices.MONITOR).count() == 1
+    assert User.objects.filter(pk=monitor_user.pk, is_active=True).exists()
     assert User.objects.filter(pk=admin.pk).exists()
     assert User.objects.filter(pk=leader.pk).exists()
-    assert WorkSession.objects.count() == 0
-    assert AttendanceImportJob.objects.count() == 0
-    assert Annotation.objects.count() == 0
-    assert MonitorMemorandum.objects.count() == 0
-    assert ScheduleException.objects.count() == 0
+    assert WorkSession.objects.count() == 1
+    assert AttendanceImportJob.objects.count() == 1
+    assert Annotation.objects.count() == 1
+    assert MonitorMemorandum.objects.count() == 1
+    assert ScheduleException.objects.count() == 1
+    assert AcademicSemester.objects.get(name="2026-1").is_active is False
+    assert AcademicSemester.objects.get(name="2026-3").is_active is True

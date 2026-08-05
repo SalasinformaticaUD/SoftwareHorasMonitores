@@ -46,3 +46,13 @@ class User(AbstractUser, BaseModel):
     def display_name(self) -> str:
         full_name = self.get_full_name().strip()
         return full_name or self.username
+
+    @property
+    def monitor_profile(self):
+        return (
+            self.monitor_profiles.filter(is_active=True)
+            .select_related("semester")
+            .order_by("-semester__starts_on", "-created_at")
+            .first()
+            or self.monitor_profiles.select_related("semester").order_by("-semester__starts_on", "-created_at").first()
+        )

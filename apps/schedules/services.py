@@ -239,7 +239,7 @@ def _flush_monitor_blocks(
 ) -> None:
     if not monitor_code or not blocks:
         return
-    monitor = Monitor.objects.filter(codigo_estudiante=str(monitor_code).strip()).first()
+    monitor = Monitor.objects.filter(codigo_estudiante=str(monitor_code).strip(), is_active=True).first()
     if monitor is None:
         result.missing_monitors.append(f"{monitor_name or 'Sin nombre'} ({monitor_code})")
         return

@@ -7,7 +7,7 @@ from apps.work_sessions.models import WorkSession
 
 
 def visible_sessions_for_user(user) -> QuerySet[WorkSession]:
-    queryset = WorkSession.objects.select_related("monitor", "schedule", "raw_record")
+    queryset = WorkSession.objects.select_related("monitor", "schedule", "raw_record").filter(monitor__is_active=True)
     if user.role == UserRoleChoices.ADMIN:
         return queryset
     return queryset.filter(monitor__department=user.department)
@@ -42,4 +42,3 @@ def monitor_minutes_summary_for_user(user):
         )
         .order_by("monitor__full_name")
     )
-

@@ -51,7 +51,7 @@ def rejected_raw_records_for_user(user) -> QuerySet[AttendanceRawRecord]:
 
 
 def raw_history_for_user(user) -> QuerySet[AttendanceRawRecord]:
-    queryset = AttendanceRawRecord.objects.select_related("import_job", "monitor")
+    queryset = AttendanceRawRecord.objects.select_related("import_job", "monitor").filter(monitor__is_active=True)
     if user.role == UserRoleChoices.ADMIN:
         return queryset
     return queryset.filter(monitor__department=user.department)

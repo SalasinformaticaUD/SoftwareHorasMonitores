@@ -24,6 +24,7 @@ from apps.common.choices import DepartmentChoices, UserRoleChoices
 from apps.common.utils import normalize_text
 from apps.common.web import AdminOrLeaderRequiredMixin, MonitorRequiredMixin, enforce_public_lookup_limit, paginate_collection
 from apps.monitors.selectors import visible_monitors_for_user
+from apps.monitors.models import AcademicSemester, Monitor
 from apps.reports.forms import PublicMonitorLookupForm
 from apps.monitors.forms import MonitorActaCompromisoUploadForm
 from apps.reports.selectors import (
@@ -129,6 +130,59 @@ class MonitorRecordsDetailView(AdminOrLeaderRequiredMixin, TemplateView):
         if monitor is None:
             raise Http404("Monitor no encontrado.")
         context["result"] = monitor_lookup_result(monitor=monitor)
+        return context
+
+
+class HistoricalRecordsView(AdminOrLeaderRequiredMixin, TemplateView):
+    """Permite consultar historicos archivados por semestre."""
+
+    template_name = "dashboard/historical_records.html"
+    paginate_by = 20
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        semester_id = self.request.GET.get("semester", "").strip()
+        query = self.request.GET.get("q", "").strip()
+        monitors = (
+            visible_monitors_for_user(self.request.user)
+            .select_related("user", "semester")
+            .filter(is_active=False)
+            .order_by("-semester__starts_on", "department", "full_name")
+        )
+        if semester_id:
+            monitors = monitors.filter(semester_id=semester_id)
+        if query:
+            monitors = monitors.filter(
+                Q(full_name__icontains=query)
+                | Q(codigo_estudiante__icontains=query)
+                | Q(user__email__icontains=query)
+            )
+        pagination = paginate_collection(self.request, monitors, per_page=self.paginate_by)
+        context.update(
+            {
+                "semesters": AcademicSemester.objects.filter(monitors__is_active=False)
+                .distinct()
+                .order_by("-starts_on", "-created_at"),
+                "monitors": pagination["page_obj"].object_list,
+                "filters": {"semester": semester_id, "q": query},
+                **pagination,
+            }
+        )
+        return context
+
+
+class HistoricalMonitorRecordsDetailView(AdminOrLeaderRequiredMixin, TemplateView):
+    """Muestra el detalle historico de un monitor archivado."""
+
+    template_name = "dashboard/monitor_records.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        monitor = visible_monitors_for_user(self.request.user).filter(pk=self.kwargs["monitor_id"]).first()
+        if monitor is None:
+            raise Http404("Monitor no encontrado.")
+        context["result"] = monitor_lookup_result(monitor=monitor)
+        context["historical_mode"] = not monitor.is_active
         return context
 
 
@@ -509,7 +563,15 @@ class MonitorSelfHoursView(MonitorRequiredMixin, TemplateView):
             de carga cuando exista.
         """
         context = super().get_context_data(**kwargs)
-        monitor = getattr(self.request.user, "monitor_profile", None)
+        profiles = list(
+            Monitor.objects.filter(user=self.request.user)
+            .select_related("semester")
+            .order_by("-is_active", "-semester__starts_on", "-created_at")
+        )
+        selected_id = self.request.GET.get("monitor_id")
+        monitor = next((profile for profile in profiles if str(profile.id) == selected_id), None)
+        if monitor is None:
+            monitor = next((profile for profile in profiles if profile.is_active), None) or (profiles[0] if profiles else None)
         proyecto = monitor.get_proyecto_curricular_display() if monitor and monitor.proyecto_curricular else None
         context["result"] = monitor_lookup_result(monitor=monitor) if monitor else None
         if context["result"]:
@@ -517,6 +579,8 @@ class MonitorSelfHoursView(MonitorRequiredMixin, TemplateView):
             context["result"]["monitor_name"] = monitor.full_name.replace(" ", "_")  # Agregar nombre completo del monitor al resultado para usar en la plantilla
             context["result"]["compromise_act_url"] = reverse("monitor-commitment-act-pdf")
             context["result"]["proyecto"] = proyecto
+            context["result"]["profiles"] = profiles
+            context["result"]["is_current_semester"] = bool(monitor.is_active)
         context.update(
             {
                 "upload_form": kwargs.get("upload_form") or MonitorActaCompromisoUploadForm(),

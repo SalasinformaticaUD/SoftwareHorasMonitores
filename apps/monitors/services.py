@@ -13,6 +13,7 @@ from django.contrib.auth.forms import PasswordResetForm
 from django.contrib.auth.tokens import default_token_generator
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.utils import timezone
 from django.utils.http import urlsafe_base64_encode
 from django.utils.encoding import force_bytes
 from openpyxl import load_workbook
@@ -20,7 +21,7 @@ from openpyxl import load_workbook
 from apps.attendance.validators import validate_excel_extension
 from apps.common.choices import DepartmentChoices, UserRoleChoices
 from apps.common.utils import normalize_text
-from apps.monitors.models import Monitor, PROJECT_CHOICES
+from apps.monitors.models import AcademicSemester, Monitor, PROJECT_CHOICES
 
 
 User = get_user_model()
@@ -148,9 +149,18 @@ class MonitorImportResult:
 
 @dataclass
 class SemesterResetResult:
-    """Resumen de datos eliminados al iniciar un semestre nuevo."""
+    """Resumen de datos archivados al iniciar un semestre nuevo."""
 
     deleted_counts: dict[str, int] = field(default_factory=dict)
+    archived_semester: AcademicSemester | None = None
+    new_semester: AcademicSemester | None = None
+
+
+def get_current_semester() -> AcademicSemester:
+    semester = AcademicSemester.objects.filter(is_active=True).first()
+    if semester:
+        return semester
+    return AcademicSemester.objects.create(name="2026-1", is_active=True)
 
 
 def send_monitor_activation_email(*, user, request=None) -> bool:
@@ -221,22 +231,39 @@ def create_monitor_with_user(
     proyecto_curricular = str(proyecto_curricular or "").strip()
     telefono = str(telefono or "").strip()
     with transaction.atomic():
-        user = User(
-            username=email,
-            email=email,
-            first_name=full_name.split(" ", 1)[0],
-            last_name=full_name.split(" ", 1)[1] if " " in full_name else "",
-            role=UserRoleChoices.MONITOR,
-            department=department,
-            is_staff=False,
-            is_superuser=False,
-            is_active=True,
+        semester = get_current_semester()
+        user = (
+            User.objects.filter(email__iexact=email).first()
+            or User.objects.filter(username__iexact=email).first()
         )
-        user.set_unusable_password()
+        user_created = user is None
+        if user is None:
+            user = User(
+                username=email,
+                email=email,
+                role=UserRoleChoices.MONITOR,
+                is_staff=False,
+                is_superuser=False,
+            )
+            user.set_unusable_password()
+        if user.role != UserRoleChoices.MONITOR:
+            raise ValidationError("Ya existe una cuenta no monitor con este correo.")
+        if Monitor.objects.filter(user=user, is_active=True).exists():
+            raise ValidationError("Esta cuenta ya tiene un monitor activo en el semestre actual.")
+        user.username = email
+        user.email = email
+        user.first_name = full_name.split(" ", 1)[0]
+        user.last_name = full_name.split(" ", 1)[1] if " " in full_name else ""
+        user.department = department
+        user.role = UserRoleChoices.MONITOR
+        user.is_staff = False
+        user.is_superuser = False
+        user.is_active = True
         user.full_clean()
         user.save()
 
         monitor = Monitor(
+            semester=semester,
             user=user,
             full_name=full_name,
             codigo_estudiante=codigo_estudiante,
@@ -248,7 +275,8 @@ def create_monitor_with_user(
         )
         monitor.full_clean()
         monitor.save()
-    send_monitor_activation_email(user=user, request=request)
+    if user_created or not user.has_usable_password():
+        send_monitor_activation_email(user=user, request=request)
     return monitor
 
 
@@ -298,6 +326,7 @@ def update_monitor_with_user(
     telefono = str(telefono or "").strip()
 
     with transaction.atomic():
+        semester = monitor.semester or get_current_semester()
         user = monitor.user
         user_created = False
         if user is None:
@@ -320,6 +349,7 @@ def update_monitor_with_user(
         user.save()
 
         monitor.user = user
+        monitor.semester = semester
         monitor.full_name = full_name
         monitor.codigo_estudiante = codigo_estudiante
         monitor.numero_documento = numero_documento
@@ -547,11 +577,15 @@ def import_monitors_from_workbook(*, uploaded_file, request=None, actor=None) ->
                 continue
             if not email or not full_name or not codigo:
                 raise ValidationError("Email, nombre y codigo son obligatorios.")
-            if User.objects.filter(email__iexact=email).exists() or User.objects.filter(username__iexact=email).exists():
-                result.skipped.append(ImportIssue(row_number=row_number, email=email, reason="El correo ya existe."))
+            existing_user = (
+                User.objects.filter(email__iexact=email).first()
+                or User.objects.filter(username__iexact=email).first()
+            )
+            if existing_user and existing_user.role != UserRoleChoices.MONITOR:
+                result.skipped.append(ImportIssue(row_number=row_number, email=email, reason="El correo pertenece a una cuenta no monitor."))
                 continue
-            if Monitor.objects.filter(codigo_estudiante__iexact=codigo).exists():
-                result.skipped.append(ImportIssue(row_number=row_number, email=email, reason="El codigo estudiantil ya existe."))
+            if Monitor.objects.filter(codigo_estudiante__iexact=codigo, is_active=True).exists():
+                result.skipped.append(ImportIssue(row_number=row_number, email=email, reason="El codigo estudiantil ya esta activo en el semestre actual."))
                 continue
             create_monitor_with_user(
                 full_name=full_name,
@@ -572,7 +606,7 @@ def import_monitors_from_workbook(*, uploaded_file, request=None, actor=None) ->
 
 
 def semester_reset_preview_counts() -> dict[str, int]:
-    """Cuenta los datos operativos que se eliminarian al iniciar semestre."""
+    """Cuenta los datos operativos que se archivarian al iniciar semestre."""
     from apps.annotations.models import Annotation
     from apps.attendance.models import AttendanceImportJob, AttendanceInconsistency, AttendanceRawRecord
     from apps.notifications.models import Notification
@@ -580,25 +614,26 @@ def semester_reset_preview_counts() -> dict[str, int]:
     from apps.schedules.models import Schedule, ScheduleException
     from apps.work_sessions.models import WorkSession
 
+    current_semester = get_current_semester()
     return {
-        "monitors": Monitor.objects.count(),
+        "monitors": Monitor.objects.filter(semester=current_semester, is_active=True).count(),
         "monitor_users": User.objects.filter(role=UserRoleChoices.MONITOR).count(),
-        "schedules": Schedule.objects.count(),
+        "schedules": Schedule.objects.filter(monitor__semester=current_semester).count(),
         "schedule_exceptions": ScheduleException.objects.count(),
         "attendance_import_jobs": AttendanceImportJob.objects.count(),
-        "attendance_raw_records": AttendanceRawRecord.objects.count(),
-        "work_sessions": WorkSession.objects.count(),
+        "attendance_raw_records": AttendanceRawRecord.objects.filter(monitor__semester=current_semester).count(),
+        "work_sessions": WorkSession.objects.filter(monitor__semester=current_semester).count(),
         "attendance_inconsistencies": AttendanceInconsistency.objects.count(),
-        "annotations": Annotation.objects.count(),
-        "report_snapshots": MonitorReportSnapshot.objects.count(),
-        "memorandums": MonitorMemorandum.objects.count(),
+        "annotations": Annotation.objects.filter(monitor__semester=current_semester).count(),
+        "report_snapshots": MonitorReportSnapshot.objects.filter(monitor__semester=current_semester).count(),
+        "memorandums": MonitorMemorandum.objects.filter(monitor__semester=current_semester).count(),
         "notifications": Notification.objects.count(),
     }
 
 
 @transaction.atomic
-def reset_semester_data() -> SemesterResetResult:
-    """Elimina datos operativos del semestre y conserva usuarios admin/lider."""
+def reset_semester_data(*, new_semester_name: str = "2026-3") -> SemesterResetResult:
+    """Archiva el semestre actual y abre uno nuevo sin borrar historicos."""
     from apps.annotations.models import Annotation
     from apps.attendance.models import AttendanceImportJob, AttendanceInconsistency
     from apps.notifications.models import Notification
@@ -607,17 +642,21 @@ def reset_semester_data() -> SemesterResetResult:
     from apps.work_sessions.models import WorkSession
 
     deleted_counts = semester_reset_preview_counts()
+    current_semester = get_current_semester()
+    if AcademicSemester.objects.filter(name__iexact=new_semester_name).exclude(pk=current_semester.pk).exists():
+        raise ValidationError("Ya existe un semestre con ese nombre.")
 
-    Annotation.objects.all().delete()
-    WorkSession.objects.all().delete()
-    AttendanceInconsistency.objects.all().delete()
-    AttendanceImportJob.objects.all().delete()
-    MonitorReportSnapshot.objects.all().delete()
-    MonitorMemorandum.objects.all().delete()
-    Schedule.objects.all().delete()
-    ScheduleException.objects.all().delete()
-    Monitor.objects.all().delete()
-    User.objects.filter(role=UserRoleChoices.MONITOR).delete()
+    Schedule.objects.filter(monitor__semester=current_semester).update(is_active=False)
+    Monitor.objects.filter(semester=current_semester, is_active=True).update(is_active=False)
+    current_semester.is_active = False
+    current_semester.archived_at = timezone.now()
+    current_semester.save(update_fields=["is_active", "archived_at", "updated_at"])
+
+    new_semester = AcademicSemester.objects.create(name=new_semester_name, is_active=True)
     Notification.objects.all().delete()
 
-    return SemesterResetResult(deleted_counts=deleted_counts)
+    return SemesterResetResult(
+        deleted_counts=deleted_counts,
+        archived_semester=current_semester,
+        new_semester=new_semester,
+    )

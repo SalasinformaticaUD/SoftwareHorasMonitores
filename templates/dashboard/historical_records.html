@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block title %}Historicos{% endblock %}
+
+{% block content %}
+<div class="admin-module">
+  <div class="admin-crumb">
+    <span>Administracion</span><span>/</span><strong>Historicos</strong>
+  </div>
+
+  <section class="admin-hero">
+    <div>
+      <div class="admin-kicker">Semestres archivados</div>
+      <h1 class="admin-title">Historicos de monitorias</h1>
+      <p class="admin-subtitle">Consulta monitores, horarios, registros procesados, horas extra y anotaciones de semestres anteriores.</p>
+    </div>
+  </section>
+
+  <div class="card admin-card mb-4">
+    <div class="card-body">
+      <form class="row g-3 align-items-end" method="get">
+        <div class="col-md-4">
+          <label class="form-label" for="semester">Semestre</label>
+          <select class="form-select" id="semester" name="semester">
+            <option value="">Todos</option>
+            {% for semester in semesters %}
+              <option value="{{ semester.id }}" {% if filters.semester == semester.id|stringformat:"s" %}selected{% endif %}>{{ semester.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label" for="q">Buscar</label>
+          <input class="form-control" id="q" name="q" value="{{ filters.q }}" placeholder="Nombre, codigo o correo">
+        </div>
+        <div class="col-md-2">
+          <button class="btn btn-primary w-100" type="submit">Filtrar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="card admin-card">
+    <div class="card-body">
+      <div class="table-responsive">
+        <table class="table table-hover align-middle">
+          <thead>
+            <tr>
+              <th>Semestre</th>
+              <th>Monitor</th>
+              <th>Codigo</th>
+              <th>Dependencia</th>
+              <th>Correo</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for monitor in monitors %}
+              <tr>
+                <td>{{ monitor.semester.name|default:"Sin semestre" }}</td>
+                <td>{{ monitor.full_name }}</td>
+                <td>{{ monitor.codigo_estudiante }}</td>
+                <td>{{ monitor.get_department_display }}</td>
+                <td>{{ monitor.user.email|default:"-" }}</td>
+                <td class="text-end">
+                  <a class="btn btn-sm btn-outline-primary" href="{% url 'historical-monitor-records' monitor.id %}">Revisar registros</a>
+                </td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td class="text-center text-muted py-4" colspan="6">No hay historicos archivados.</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% include "includes/pagination.html" %}
+    </div>
+  </div>
+</div>
+{% endblock %}

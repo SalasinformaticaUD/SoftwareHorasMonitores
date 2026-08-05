@@ -76,6 +76,8 @@ class MonitorAdminView(AdminOrLeaderRequiredMixin, TemplateView):
             queryset = queryset.filter(is_active=True, user__is_active=True, user__password__startswith="!")
         elif status == "inactive":
             queryset = queryset.filter(Q(is_active=False) | Q(user__is_active=False))
+        else:
+            queryset = queryset.filter(is_active=True)
         if alerts == "memorandums":
             queryset = queryset.filter(memorandums_count__gt=0)
         elif alerts == "late":
@@ -130,7 +132,7 @@ class MonitorAdminView(AdminOrLeaderRequiredMixin, TemplateView):
                 "upload_result": kwargs.get("upload_result"),
                 "monitors": monitors,
                 "stats": {
-                    "total": visible_monitors_for_user(self.request.user).count(),
+                    "total": visible_monitors_for_user(self.request.user).filter(is_active=True).count(),
                     "active": visible_monitors_for_user(self.request.user)
                     .filter(is_active=True, user__is_active=True)
                     .exclude(user__password__startswith="!")
@@ -271,18 +273,18 @@ class SemesterResetView(AdminRequiredMixin, TemplateView):
     template_name = "admin_portal/monitors/semester_reset.html"
 
     reset_items = (
-        ("monitors", "Monitores"),
-        ("monitor_users", "Cuentas de usuario monitor"),
-        ("schedules", "Horarios"),
-        ("schedule_exceptions", "Excepciones"),
-        ("attendance_import_jobs", "Cargas de asistencia"),
-        ("attendance_raw_records", "Registros importados"),
-        ("work_sessions", "Registros procesados y horas extra"),
-        ("attendance_inconsistencies", "Inconsistencias"),
-        ("annotations", "Anotaciones"),
-        ("report_snapshots", "Reportes generados"),
-        ("memorandums", "Memorandos"),
-        ("notifications", "Notificaciones"),
+        ("monitors", "Monitores activos que pasan a historico"),
+        ("monitor_users", "Cuentas de monitor conservadas"),
+        ("schedules", "Horarios archivados"),
+        ("schedule_exceptions", "Excepciones conservadas"),
+        ("attendance_import_jobs", "Cargas de asistencia conservadas"),
+        ("attendance_raw_records", "Registros importados conservados"),
+        ("work_sessions", "Registros procesados y horas extra conservados"),
+        ("attendance_inconsistencies", "Inconsistencias conservadas"),
+        ("annotations", "Anotaciones conservadas"),
+        ("report_snapshots", "Reportes generados conservados"),
+        ("memorandums", "Memorandos conservados"),
+        ("notifications", "Notificaciones que se limpiaran"),
     )
 
     def _count_rows(self):
@@ -306,7 +308,19 @@ class SemesterResetView(AdminRequiredMixin, TemplateView):
             messages.error(request, "No se pudo confirmar la accion. Revisa la contrasena.")
             return self.render_to_response(self.get_context_data(form=form, reset_attempted=True))
 
-        result = reset_semester_data()
-        deleted_total = sum(result.deleted_counts.values())
-        messages.success(request, f"Semestre nuevo iniciado. Se limpiaron {deleted_total} registros operativos.")
+        try:
+            result = reset_semester_data(new_semester_name=form.cleaned_data["new_semester_name"])
+        except ValidationError as exc:
+            form.add_error("new_semester_name", "; ".join(exc.messages))
+            messages.error(request, "No se pudo iniciar el semestre nuevo.")
+            return self.render_to_response(self.get_context_data(form=form, reset_attempted=True))
+        archived_total = sum(result.deleted_counts.values())
+        messages.success(
+            request,
+            "Semestre {0} archivado y semestre {1} iniciado. Se conservaron {2} registros historicos.".format(
+                result.archived_semester.name,
+                result.new_semester.name,
+                archived_total,
+            ),
+        )
         return redirect("admin-monitors")

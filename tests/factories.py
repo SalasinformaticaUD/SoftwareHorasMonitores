@@ -14,7 +14,7 @@ from apps.common.choices import (
     ReconciliationStatusChoices,
     UserRoleChoices,
 )
-from apps.monitors.models import Monitor
+from apps.monitors.models import AcademicSemester, Monitor
 from apps.reports.models import MonitorReportSnapshot
 from apps.schedules.models import Schedule, ScheduleException
 from apps.work_sessions.models import WorkSession
@@ -58,6 +58,11 @@ class MonitorFactory(factory.django.DjangoModelFactory):
     full_name = factory.Sequence(lambda n: "Monitor {0}".format(n))
     department = DepartmentChoices.PHYSICS
     is_active = True
+
+    @factory.lazy_attribute
+    def semester(self):
+        semester, _created = AcademicSemester.objects.get_or_create(name="2026-1", defaults={"is_active": True})
+        return semester
 
 
 class ScheduleFactory(factory.django.DjangoModelFactory):

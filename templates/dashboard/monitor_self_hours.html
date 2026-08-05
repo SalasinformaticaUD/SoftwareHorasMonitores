@@ -65,9 +65,32 @@
   </section>
 
   {% if result %}
+  {% if result.profiles|length > 1 %}
+  <div class="card admin-card mb-4">
+    <div class="card-body">
+      <form class="row g-3 align-items-end" method="get">
+        <div class="col-md-8">
+          <label class="form-label" for="monitor_id">Semestre academico</label>
+          <select class="form-select" id="monitor_id" name="monitor_id">
+            {% for profile in result.profiles %}
+              <option value="{{ profile.id }}" {% if profile.id == result.monitor.id %}selected{% endif %}>
+                {{ profile.semester.name|default:"Sin semestre" }}{% if profile.is_active %} - actual{% endif %}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-4">
+          <button class="btn btn-primary w-100" type="submit">Revisar informacion</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  {% endif %}
+
   <div class="card admin-card mb-4">
     <div class="card-body">
       <h2 class="h5">{{ result.monitor.full_name }}</h2>
+      <p class="mb-1">Semestre academico: {{ result.monitor.semester.name|default:"Sin semestre" }}</p>
       <p class="mb-1">Codigo: {{ result.monitor.codigo_estudiante }}</p>
       <p class="mb-1">Documento: {{ result.monitor.numero_documento|default:"Pendiente" }}</p>
       <p class="mb-1">Proyecto curricular: {{ result.proyecto|default:"Pendiente" }}</p>
@@ -75,6 +98,7 @@
       <p class="mb-0">Dependencia: {{ result.monitor.get_department_display }}</p>
     </div>
   </div>
+  {% if result.is_current_semester %}
   <div class="card admin-card mb-4">
     <div class="card-body">
       <h2 class="h5">Acta de compromiso</h2>
@@ -109,6 +133,7 @@
       </p>
     </div>
   </div>
+  {% endif %}
 
   <div class="row g-3">
     <div class="col-md-4">

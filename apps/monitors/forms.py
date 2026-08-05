@@ -60,17 +60,23 @@ class MonitorRegistrationForm(forms.Form):
         users = User.objects.filter(email__iexact=email) | User.objects.filter(username__iexact=email)
         if self.instance and self.instance.user_id:
             users = users.exclude(pk=self.instance.user_id)
-        if users.exists():
-            raise forms.ValidationError("Ya existe una cuenta con este correo.")
+        non_monitor_user = users.exclude(role=UserRoleChoices.MONITOR).first()
+        if non_monitor_user:
+            raise forms.ValidationError("Ya existe una cuenta no monitor con este correo.")
+        active_monitor = Monitor.objects.filter(user__in=users, is_active=True)
+        if self.instance:
+            active_monitor = active_monitor.exclude(pk=self.instance.pk)
+        if active_monitor.exists():
+            raise forms.ValidationError("Ya existe un monitor activo con este correo.")
         return email
 
     def clean_codigo_estudiante(self):
         code = self.cleaned_data["codigo_estudiante"].strip()
-        monitors = Monitor.objects.filter(codigo_estudiante__iexact=code)
+        monitors = Monitor.objects.filter(codigo_estudiante__iexact=code, is_active=True)
         if self.instance:
             monitors = monitors.exclude(pk=self.instance.pk)
         if monitors.exists():
-            raise forms.ValidationError("Ya existe un monitor con este codigo.")
+            raise forms.ValidationError("Ya existe un monitor activo con este codigo.")
         return code
 
     def clean_department(self):
@@ -94,6 +100,12 @@ class MonitorBulkUploadForm(forms.Form):
 
 
 class SemesterResetConfirmationForm(forms.Form):
+    new_semester_name = forms.CharField(
+        label="Nuevo semestre academico",
+        max_length=20,
+        initial="2026-3",
+        help_text="Ejemplo: 2026-3",
+    )
     password = forms.CharField(
         label="Contrasena del administrador",
         widget=forms.PasswordInput(attrs={"autocomplete": "current-password"}),
@@ -102,7 +114,14 @@ class SemesterResetConfirmationForm(forms.Form):
     def __init__(self, *args, admin_user=None, **kwargs):
         self.admin_user = admin_user
         super().__init__(*args, **kwargs)
+        _apply_bootstrap(self.fields["new_semester_name"])
         _apply_bootstrap(self.fields["password"])
+
+    def clean_new_semester_name(self):
+        value = self.cleaned_data["new_semester_name"].strip()
+        if not value:
+            raise forms.ValidationError("Ingresa el semestre nuevo.")
+        return value
 
     def clean_password(self):
         password = self.cleaned_data["password"]

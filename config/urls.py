@@ -18,6 +18,8 @@ from apps.reports.views import (
     CommitmentActAdminView,
     DepartmentDashboardExportView,
     GeneratedCommitmentActAdminDownloadView,
+    HistoricalMonitorRecordsDetailView,
+    HistoricalRecordsView,
     LeaderDashboardView,
     MemorandumAdminView,
     MonitorCommitmentActPdfView,
@@ -107,6 +109,12 @@ urlpatterns = [
         name="password_reset_complete",
     ),
     path("dashboard/", LeaderDashboardView.as_view(), name="leader-dashboard"),
+    path("historicos/", HistoricalRecordsView.as_view(), name="historical-records"),
+    path(
+        "historicos/monitor/<uuid:monitor_id>/registros/",
+        HistoricalMonitorRecordsDetailView.as_view(),
+        name="historical-monitor-records",
+    ),
     path(
         "dashboard/monitor/<uuid:monitor_id>/registros/",
         MonitorRecordsDetailView.as_view(),

@@ -28,13 +28,18 @@
     <h1 class="h3 mb-1">Registros del monitor</h1>
     <p class="text-muted mb-0">Primero se muestran los dias con registros; abre un dia para ver su linea multinivel.</p>
   </div>
-  <a class="btn btn-outline-secondary" href="{% url 'leader-dashboard' %}">Volver al dashboard</a>
+  {% if historical_mode %}
+    <a class="btn btn-outline-secondary" href="{% url 'historical-records' %}">Volver a historicos</a>
+  {% else %}
+    <a class="btn btn-outline-secondary" href="{% url 'leader-dashboard' %}">Volver al dashboard</a>
+  {% endif %}
 </div>
 
 {% if result %}
   <div class="card shadow-sm mb-4">
     <div class="card-body">
       <h2 class="h5">{{ result.monitor.full_name }}</h2>
+      <p class="mb-1">Semestre academico: {{ result.monitor.semester.name|default:"Sin semestre" }}</p>
       <p class="mb-1">Codigo: {{ result.monitor.codigo_estudiante }}</p>
       <p class="mb-0">Dependencia: {{ result.monitor.get_department_display }}</p>
     </div>

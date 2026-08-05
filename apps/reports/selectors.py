@@ -567,7 +567,7 @@ def build_monitor_rows_for_user(user, department: Optional[str] = None) -> list[
     Returns:
         list[dict]: Filas con monitor, metricas crudas y valores formateados.
     """
-    monitors = visible_monitors_for_user(user).order_by("department", "full_name")
+    monitors = visible_monitors_for_user(user).filter(is_active=True).order_by("department", "full_name")
     if department:
         monitors = monitors.filter(department=department)
     monitor_rows = []
@@ -600,7 +600,7 @@ def available_dashboard_departments_for_user(user) -> list[tuple[str, str]]:
     """
     departments = []
     values = {row[0]: row[1] for row in DepartmentChoices.choices}
-    for department in visible_monitors_for_user(user).order_by("department").values_list("department", flat=True).distinct():
+    for department in visible_monitors_for_user(user).filter(is_active=True).order_by("department").values_list("department", flat=True).distinct():
         departments.append((department, values.get(department, department)))
     return departments
 
@@ -619,6 +619,7 @@ def build_dashboard_context(user) -> dict:
     pending_overtime = (
         WorkSession.objects.select_related("monitor")
         .filter(overtime_status=OvertimeStatusChoices.PENDING)
+        .filter(monitor__is_active=True)
         .exclude(session_state=SessionStateChoices.INVALID)
         .order_by("-work_day")
     )

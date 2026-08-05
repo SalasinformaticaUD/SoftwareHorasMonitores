@@ -8,8 +8,13 @@ from openpyxl import Workbook
 
 from apps.common.choices import DepartmentChoices, UserRoleChoices
 from apps.monitors.forms import MonitorRegistrationForm
-from apps.monitors.models import Monitor
-from apps.monitors.services import create_monitor_with_user, import_monitors_from_workbook, update_monitor_with_user
+from apps.monitors.models import AcademicSemester, Monitor
+from apps.monitors.services import (
+    create_monitor_with_user,
+    import_monitors_from_workbook,
+    reset_semester_data,
+    update_monitor_with_user,
+)
 
 
 User = get_user_model()
@@ -60,12 +65,20 @@ def test_create_monitor_with_user_links_account_and_sends_activation_email():
 
 
 @pytest.mark.django_db
-def test_import_monitors_from_workbook_skips_existing_email_and_continues():
-    User.objects.create_user(
+def test_import_monitors_from_workbook_skips_existing_active_email_and_continues():
+    existing_user = User.objects.create_user(
         username="existing@example.edu",
         email="existing@example.edu",
         role=UserRoleChoices.MONITOR,
         department=DepartmentChoices.PHYSICS,
+    )
+    Monitor.objects.create(
+        user=existing_user,
+        semester=AcademicSemester.objects.get_or_create(name="2026-1", defaults={"is_active": True})[0],
+        full_name="Existing Monitor",
+        codigo_estudiante="20260001",
+        department=DepartmentChoices.PHYSICS,
+        is_active=True,
     )
     workbook = build_monitor_workbook(
         [
@@ -84,6 +97,32 @@ def test_import_monitors_from_workbook_skips_existing_email_and_continues():
     assert monitor.numero_documento == "20202020"
     assert monitor.proyecto_curricular == "ingenieria_sistemas"
     assert monitor.telefono == "3100000000"
+
+
+@pytest.mark.django_db
+def test_repeating_monitor_reuses_account_after_semester_reset():
+    monitor = create_monitor_with_user(
+        full_name="Repeat Monitor",
+        codigo_estudiante="20269999",
+        email="repeat@example.edu",
+        department=DepartmentChoices.PHYSICS,
+    )
+    user = monitor.user
+
+    reset_semester_data(new_semester_name="2026-3")
+    repeated_monitor = create_monitor_with_user(
+        full_name="Repeat Monitor",
+        codigo_estudiante="20269999",
+        email="repeat@example.edu",
+        department=DepartmentChoices.PHYSICS,
+    )
+
+    monitor.refresh_from_db()
+    assert monitor.is_active is False
+    assert repeated_monitor.user == user
+    assert repeated_monitor.is_active is True
+    assert repeated_monitor.semester.name == "2026-3"
+    assert Monitor.objects.filter(user=user).count() == 2
 
 
 @pytest.mark.django_db

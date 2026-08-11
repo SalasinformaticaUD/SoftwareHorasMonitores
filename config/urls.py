@@ -18,6 +18,7 @@ from apps.reports.views import (
     CommitmentActAdminView,
     DepartmentDashboardExportView,
     GeneratedCommitmentActAdminDownloadView,
+    HistoricalDepartmentSemesterExportView,
     HistoricalMonitorRecordsDetailView,
     HistoricalRecordsView,
     LeaderDashboardView,
@@ -110,6 +111,11 @@ urlpatterns = [
     ),
     path("dashboard/", LeaderDashboardView.as_view(), name="leader-dashboard"),
     path("historicos/", HistoricalRecordsView.as_view(), name="historical-records"),
+    path(
+        "historicos/<str:department>/<uuid:semester_id>/excel/",
+        HistoricalDepartmentSemesterExportView.as_view(),
+        name="historical-department-semester-export",
+    ),
     path(
         "historicos/monitor/<uuid:monitor_id>/registros/",
         HistoricalMonitorRecordsDetailView.as_view(),

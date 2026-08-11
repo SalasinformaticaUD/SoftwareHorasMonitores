@@ -557,19 +557,7 @@ def aggregate_monitor_metrics(*, monitor, start_date: Optional[date] = None, end
     }
 
 
-def build_monitor_rows_for_user(user, department: Optional[str] = None) -> list[dict]:
-    """Construye filas del dashboard de lider segun visibilidad del usuario.
-
-    Args:
-        user: Usuario autenticado que consulta el dashboard.
-        department: Dependencia opcional para filtrar monitores.
-
-    Returns:
-        list[dict]: Filas con monitor, metricas crudas y valores formateados.
-    """
-    monitors = visible_monitors_for_user(user).filter(is_active=True).order_by("department", "full_name")
-    if department:
-        monitors = monitors.filter(department=department)
+def _build_monitor_rows(monitors) -> list[dict]:
     monitor_rows = []
     for monitor in monitors:
         metrics = aggregate_monitor_metrics(monitor=monitor)
@@ -587,6 +575,32 @@ def build_monitor_rows_for_user(user, department: Optional[str] = None) -> list[
         )
         monitor_rows.append({"monitor": monitor, **metrics})
     return monitor_rows
+
+
+def build_monitor_rows_for_user(user, department: Optional[str] = None) -> list[dict]:
+    """Construye filas del dashboard de lider segun visibilidad del usuario.
+
+    Args:
+        user: Usuario autenticado que consulta el dashboard.
+        department: Dependencia opcional para filtrar monitores.
+
+    Returns:
+        list[dict]: Filas con monitor, metricas crudas y valores formateados.
+    """
+    monitors = visible_monitors_for_user(user).filter(is_active=True).order_by("department", "full_name")
+    if department:
+        monitors = monitors.filter(department=department)
+    return _build_monitor_rows(monitors)
+
+
+def build_historical_monitor_rows_for_user(*, user, department: str, semester) -> list[dict]:
+    monitors = (
+        visible_monitors_for_user(user)
+        .filter(is_active=False, department=department, semester=semester)
+        .select_related("user", "semester")
+        .order_by("full_name")
+    )
+    return _build_monitor_rows(monitors)
 
 
 def available_dashboard_departments_for_user(user) -> list[tuple[str, str]]:

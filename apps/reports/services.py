@@ -47,7 +47,11 @@ from apps.common.events import DomainEvent, event_bus
 from apps.common.utils import normalize_text
 from apps.reports.events import REPORT_GENERATED
 from apps.reports.models import MonitorMemorandum, MonitorReportSnapshot
-from apps.reports.selectors import aggregate_monitor_metrics, build_monitor_rows_for_user
+from apps.reports.selectors import (
+    aggregate_monitor_metrics,
+    build_historical_monitor_rows_for_user,
+    build_monitor_rows_for_user,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -791,6 +795,78 @@ def export_department_dashboard_to_excel(*, user, department: str) -> Path:
         "E": 18,
         "F": 14,
         "G": 20,
+    }
+    for column_letter, width in widths.items():
+        worksheet.column_dimensions[column_letter].width = width
+    worksheet.freeze_panes = "A2"
+
+    workbook.save(export_path)
+    workbook.close()
+    return export_path
+
+
+def export_historical_department_semester_to_excel(*, user, department: str, semester) -> Path:
+    export_directory = get_dashboard_export_directory()
+    safe_semester = normalize_text(semester.name).replace(" ", "_") or "semestre"
+    file_name = f"historico_{department}_{safe_semester}.xlsx"
+    export_path = export_directory / file_name
+    rows = build_historical_monitor_rows_for_user(user=user, department=department, semester=semester)
+
+    workbook = Workbook()
+    worksheet = workbook.active
+    worksheet.title = "Historico"
+    headers = [
+        "Semestre",
+        "Dependencia",
+        "Monitor",
+        "Codigo",
+        "Correo",
+        "Normales (h)",
+        "Horas extra aprobadas (h)",
+        "Horas extra por aprobar (h)",
+        "Anotaciones (h)",
+        "Total (h)",
+        "Faltan para 192 h",
+    ]
+    worksheet.append(headers)
+
+    header_fill = PatternFill(fill_type="solid", fgColor="D9EAF7")
+    header_font = Font(bold=True)
+    for column, header in enumerate(headers, start=1):
+        cell = worksheet.cell(row=1, column=column, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+
+    for row in rows:
+        monitor = row["monitor"]
+        worksheet.append(
+            [
+                semester.name,
+                monitor.get_department_display(),
+                monitor.full_name,
+                monitor.codigo_estudiante,
+                getattr(monitor.user, "email", "") if monitor.user else "",
+                row["normal_hours"],
+                row["approved_overtime_hours"],
+                row["pending_overtime_hours"],
+                row["annotation_hours"],
+                row["total_hours"],
+                row["remaining_hours"],
+            ]
+        )
+
+    widths = {
+        "A": 14,
+        "B": 28,
+        "C": 36,
+        "D": 16,
+        "E": 34,
+        "F": 16,
+        "G": 24,
+        "H": 24,
+        "I": 18,
+        "J": 14,
+        "K": 20,
     }
     for column_letter, width in widths.items():
         worksheet.column_dimensions[column_letter].width = width

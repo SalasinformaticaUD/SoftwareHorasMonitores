@@ -36,6 +36,7 @@ from apps.reports.pdf import build_monitor_commitment_act_pdf
 from apps.reports.services import (
     build_commitment_act_status_rows,
     export_department_dashboard_to_excel,
+    export_historical_department_semester_to_excel,
     get_dashboard_export_directory,
     get_signed_commitment_acts_directory,
     send_lateness_memorandum,
@@ -139,18 +140,37 @@ class HistoricalRecordsView(AdminOrLeaderRequiredMixin, TemplateView):
     template_name = "dashboard/historical_records.html"
     paginate_by = 20
 
+    def _allowed_departments(self):
+        if self.request.user.role == UserRoleChoices.ADMIN:
+            return list(DepartmentChoices.choices)
+        return [
+            (value, label)
+            for value, label in DepartmentChoices.choices
+            if value == self.request.user.department
+        ]
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        allowed_department_values = {value for value, _label in self._allowed_departments()}
+        department = self.request.GET.get("department", "").strip()
         semester_id = self.request.GET.get("semester", "").strip()
         query = self.request.GET.get("q", "").strip()
+
+        if department not in allowed_department_values:
+            department = self.request.user.department if self.request.user.role != UserRoleChoices.ADMIN else ""
+
         monitors = (
             visible_monitors_for_user(self.request.user)
             .select_related("user", "semester")
             .filter(is_active=False)
             .order_by("-semester__starts_on", "department", "full_name")
         )
+        if department:
+            monitors = monitors.filter(department=department)
         if semester_id:
             monitors = monitors.filter(semester_id=semester_id)
+        else:
+            monitors = monitors.none()
         if query:
             monitors = monitors.filter(
                 Q(full_name__icontains=query)
@@ -158,13 +178,22 @@ class HistoricalRecordsView(AdminOrLeaderRequiredMixin, TemplateView):
                 | Q(user__email__icontains=query)
             )
         pagination = paginate_collection(self.request, monitors, per_page=self.paginate_by)
+        semester_queryset = AcademicSemester.objects.filter(
+            monitors__is_active=False,
+        )
+        if department:
+            semester_queryset = semester_queryset.filter(monitors__department=department)
+        semester_queryset = semester_queryset.distinct().order_by("-starts_on", "-created_at")
+
         context.update(
             {
-                "semesters": AcademicSemester.objects.filter(monitors__is_active=False)
-                .distinct()
-                .order_by("-starts_on", "-created_at"),
+                "departments": self._allowed_departments(),
+                "selected_department": department,
+                "selected_department_label": dict(DepartmentChoices.choices).get(department, ""),
+                "semesters": semester_queryset,
+                "selected_semester": AcademicSemester.objects.filter(pk=semester_id).first() if semester_id else None,
                 "monitors": pagination["page_obj"].object_list,
-                "filters": {"semester": semester_id, "q": query},
+                "filters": {"department": department, "semester": semester_id, "q": query},
                 **pagination,
             }
         )
@@ -184,6 +213,39 @@ class HistoricalMonitorRecordsDetailView(AdminOrLeaderRequiredMixin, TemplateVie
         context["result"] = monitor_lookup_result(monitor=monitor)
         context["historical_mode"] = not monitor.is_active
         return context
+
+
+class HistoricalDepartmentSemesterExportView(AdminOrLeaderRequiredMixin, View):
+    """Descarga el Excel historico de una dependencia y semestre."""
+
+    def get(self, request, *args, **kwargs):
+        department = kwargs["department"]
+        valid_departments = {choice[0] for choice in DepartmentChoices.choices}
+        if department not in valid_departments:
+            raise Http404("Dependencia no encontrada.")
+        if request.user.role != UserRoleChoices.ADMIN and request.user.department != department:
+            raise PermissionDenied("No puedes exportar otra dependencia.")
+
+        semester = get_object_or_404(AcademicSemester, pk=kwargs["semester_id"])
+        has_visible_history = visible_monitors_for_user(request.user).filter(
+            is_active=False,
+            department=department,
+            semester=semester,
+        ).exists()
+        if not has_visible_history:
+            raise Http404("No hay historicos para exportar.")
+
+        export_path = export_historical_department_semester_to_excel(
+            user=request.user,
+            department=department,
+            semester=semester,
+        )
+        return FileResponse(
+            export_path.open("rb"),
+            as_attachment=True,
+            filename=export_path.name,
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
 
 
 class DepartmentDashboardExportView(AdminOrLeaderRequiredMixin, View):

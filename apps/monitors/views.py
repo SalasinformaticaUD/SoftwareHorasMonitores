@@ -155,9 +155,12 @@ class MonitorAdminView(AdminOrLeaderRequiredMixin, TemplateView):
         if action == "create":
             form = MonitorRegistrationForm(request.POST, actor=request.user)
             if form.is_valid():
-                create_monitor_with_user(**form.cleaned_data, request=request, actor=request.user)
-                messages.success(request, "Monitor creado. Se envio el correo de activacion.")
-                return redirect("admin-monitors")
+                try:
+                    create_monitor_with_user(**form.cleaned_data, request=request, actor=request.user)
+                    messages.success(request, "Monitor creado. Se reutilizo la cuenta existente si tenia historial.")
+                    return redirect("admin-monitors")
+                except ValidationError as exc:
+                    form.add_error(None, "; ".join(exc.messages))
             return self.render_to_response(self.get_context_data(create_form=form))
 
         if action == "update":
@@ -180,6 +183,7 @@ class MonitorAdminView(AdminOrLeaderRequiredMixin, TemplateView):
                         uploaded_file=form.cleaned_data["source_file"],
                         request=request,
                         actor=request.user,
+                        confirm_repeating_monitors=form.cleaned_data["confirm_repeating_monitors"],
                     )
                     messages.success(request, f"Carga procesada: {result.created} monitores creados.")
                     return self.render_to_response(self.get_context_data(upload_form=form, upload_result=result))

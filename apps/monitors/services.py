@@ -13,6 +13,7 @@ from django.contrib.auth.forms import PasswordResetForm
 from django.contrib.auth.tokens import default_token_generator
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 from django.utils.http import urlsafe_base64_encode
 from django.utils.encoding import force_bytes
@@ -163,6 +164,34 @@ def get_current_semester() -> AcademicSemester:
     return AcademicSemester.objects.create(name="2026-1", is_active=True)
 
 
+def _user_by_email_or_username(email: str):
+    return (
+        User.objects.filter(email__iexact=email).first()
+        or User.objects.filter(username__iexact=email).first()
+    )
+
+
+def _historical_monitor_match(*, email: str, codigo_estudiante: str):
+    user = _user_by_email_or_username(email)
+    query = Q(codigo_estudiante__iexact=codigo_estudiante)
+    if user is not None:
+        query |= Q(user=user)
+    return (
+        Monitor.objects.filter(query, is_active=False)
+        .select_related("user", "semester")
+        .order_by("-semester__starts_on", "-created_at")
+        .first()
+    )
+
+
+def _repeating_monitor_confirmation_message(monitor: Monitor) -> str:
+    semester_label = monitor.semester.name if monitor.semester else "un semestre anterior"
+    return (
+        "El monitor {0} ({1}) ya tiene historial en {2}. "
+        "Confirma que repetira monitorias para reutilizar su cuenta y crear solo el registro del semestre actual."
+    ).format(monitor.full_name, monitor.codigo_estudiante, semester_label)
+
+
 def send_monitor_activation_email(*, user, request=None) -> bool:
     """Envia correo para activar cuenta/configurar contrasena de monitor.
 
@@ -201,6 +230,7 @@ def create_monitor_with_user(
     telefono: str = "",
     request=None,
     actor=None,
+    confirm_repeating_monitor: bool = False,
 ) -> Monitor:
     """Crea un monitor y su usuario local vinculado.
 
@@ -232,10 +262,25 @@ def create_monitor_with_user(
     telefono = str(telefono or "").strip()
     with transaction.atomic():
         semester = get_current_semester()
-        user = (
-            User.objects.filter(email__iexact=email).first()
-            or User.objects.filter(username__iexact=email).first()
-        )
+        user = _user_by_email_or_username(email)
+        historical_monitor = _historical_monitor_match(email=email, codigo_estudiante=codigo_estudiante)
+        if historical_monitor and historical_monitor.user and user and historical_monitor.user_id != user.id:
+            raise ValidationError(
+                "El codigo {0} pertenece a la cuenta historica {1}. Usa ese correo para reactivarlo.".format(
+                    codigo_estudiante,
+                    historical_monitor.user.email,
+                )
+            )
+        if historical_monitor is not None and not confirm_repeating_monitor:
+            raise ValidationError(_repeating_monitor_confirmation_message(historical_monitor))
+        if historical_monitor and historical_monitor.user and user is None:
+            user = historical_monitor.user
+            if user.email and user.email.lower() != email:
+                raise ValidationError(
+                    "Este codigo ya tiene una cuenta historica con el correo {0}. Usa ese correo para reactivarlo.".format(
+                        user.email
+                    )
+                )
         user_created = user is None
         if user is None:
             user = User(
@@ -292,6 +337,7 @@ def update_monitor_with_user(
     telefono: str = "",
     request=None,
     actor=None,
+    confirm_repeating_monitor: bool = False,
 ) -> Monitor:
     """Actualiza un monitor y sincroniza su usuario vinculado.
 
@@ -519,7 +565,13 @@ def _header_map(headers) -> dict[str, int]:
     return mapped_headers
 
 
-def import_monitors_from_workbook(*, uploaded_file, request=None, actor=None) -> MonitorImportResult:
+def import_monitors_from_workbook(
+    *,
+    uploaded_file,
+    request=None,
+    actor=None,
+    confirm_repeating_monitors: bool = False,
+) -> MonitorImportResult:
     """Importa monitores desde un archivo Excel.
 
     Args:
@@ -587,6 +639,16 @@ def import_monitors_from_workbook(*, uploaded_file, request=None, actor=None) ->
             if Monitor.objects.filter(codigo_estudiante__iexact=codigo, is_active=True).exists():
                 result.skipped.append(ImportIssue(row_number=row_number, email=email, reason="El codigo estudiantil ya esta activo en el semestre actual."))
                 continue
+            historical_monitor = _historical_monitor_match(email=email, codigo_estudiante=codigo)
+            if historical_monitor is not None and not confirm_repeating_monitors:
+                result.skipped.append(
+                    ImportIssue(
+                        row_number=row_number,
+                        email=email,
+                        reason=_repeating_monitor_confirmation_message(historical_monitor),
+                    )
+                )
+                continue
             create_monitor_with_user(
                 full_name=full_name,
                 codigo_estudiante=codigo,
@@ -597,6 +659,7 @@ def import_monitors_from_workbook(*, uploaded_file, request=None, actor=None) ->
                 telefono=telefono,
                 request=request,
                 actor=actor,
+                confirm_repeating_monitor=confirm_repeating_monitors,
             )
             result.created += 1
         except Exception as exc:

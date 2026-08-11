@@ -4,6 +4,7 @@ import pytest
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core import mail
+from django.core.exceptions import ValidationError
 from openpyxl import Workbook
 
 from apps.common.choices import DepartmentChoices, UserRoleChoices
@@ -115,6 +116,7 @@ def test_repeating_monitor_reuses_account_after_semester_reset():
         codigo_estudiante="20269999",
         email="repeat@example.edu",
         department=DepartmentChoices.PHYSICS,
+        confirm_repeating_monitor=True,
     )
 
     monitor.refresh_from_db()
@@ -123,6 +125,64 @@ def test_repeating_monitor_reuses_account_after_semester_reset():
     assert repeated_monitor.is_active is True
     assert repeated_monitor.semester.name == "2026-3"
     assert Monitor.objects.filter(user=user).count() == 2
+
+
+@pytest.mark.django_db
+def test_repeating_monitor_requires_explicit_confirmation():
+    monitor = create_monitor_with_user(
+        full_name="Repeat Monitor",
+        codigo_estudiante="20268888",
+        email="repeat.confirm@example.edu",
+        department=DepartmentChoices.PHYSICS,
+    )
+    reset_semester_data(new_semester_name="2026-3")
+
+    with pytest.raises(ValidationError, match="ya tiene historial"):
+        create_monitor_with_user(
+            full_name="Repeat Monitor",
+            codigo_estudiante=monitor.codigo_estudiante,
+            email=monitor.user.email,
+            department=DepartmentChoices.PHYSICS,
+        )
+
+
+@pytest.mark.django_db
+def test_import_repeating_monitor_requires_confirmation_before_reusing_account():
+    monitor = create_monitor_with_user(
+        full_name="Repeat Upload",
+        codigo_estudiante="20267777",
+        email="repeat.upload@example.edu",
+        department=DepartmentChoices.PHYSICS,
+    )
+    user = monitor.user
+    reset_semester_data(new_semester_name="2026-3")
+    workbook = build_monitor_workbook(
+        [
+            ["email", "full_name", "codigo_estudiante", "department"],
+            [user.email, "Repeat Upload", monitor.codigo_estudiante, DepartmentChoices.PHYSICS],
+        ]
+    )
+
+    result = import_monitors_from_workbook(uploaded_file=workbook)
+
+    assert result.created == 0
+    assert len(result.skipped) == 1
+    assert "ya tiene historial" in result.skipped[0].reason
+
+    workbook = build_monitor_workbook(
+        [
+            ["email", "full_name", "codigo_estudiante", "department"],
+            [user.email, "Repeat Upload", monitor.codigo_estudiante, DepartmentChoices.PHYSICS],
+        ]
+    )
+    confirmed_result = import_monitors_from_workbook(
+        uploaded_file=workbook,
+        confirm_repeating_monitors=True,
+    )
+
+    assert confirmed_result.created == 1
+    assert Monitor.objects.filter(user=user).count() == 2
+    assert Monitor.objects.get(user=user, is_active=True).semester.name == "2026-3"
 
 
 @pytest.mark.django_db

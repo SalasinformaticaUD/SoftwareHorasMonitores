@@ -29,6 +29,10 @@ class MonitorRegistrationForm(forms.Form):
     )
     telefono = forms.CharField(label="Telefono", max_length=32, required=False)
     department = forms.ChoiceField(label="Dependencia", choices=DepartmentChoices.choices)
+    confirm_repeating_monitor = forms.BooleanField(
+        label="Confirmo que este monitor ya hizo monitorias y repetira en el semestre actual",
+        required=False,
+    )
 
     def __init__(self, *args, actor=None, instance=None, **kwargs):
         self.actor = actor
@@ -48,6 +52,7 @@ class MonitorRegistrationForm(forms.Form):
             )
         for field in self.fields.values():
             _apply_bootstrap(field)
+        self.fields["confirm_repeating_monitor"].widget.attrs["class"] = "form-check-input"
         if actor and actor.role != UserRoleChoices.ADMIN:
             self.fields["department"].choices = [
                 choice for choice in DepartmentChoices.choices if choice[0] == actor.department
@@ -88,10 +93,15 @@ class MonitorRegistrationForm(forms.Form):
 
 class MonitorBulkUploadForm(forms.Form):
     source_file = forms.FileField(label="Archivo Excel (.xlsx)")
+    confirm_repeating_monitors = forms.BooleanField(
+        label="Confirmo que los monitores con historial en este archivo repetiran monitorias",
+        required=False,
+    )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         _apply_bootstrap(self.fields["source_file"])
+        self.fields["confirm_repeating_monitors"].widget.attrs["class"] = "form-check-input"
 
     def clean_source_file(self):
         source_file = self.cleaned_data["source_file"]

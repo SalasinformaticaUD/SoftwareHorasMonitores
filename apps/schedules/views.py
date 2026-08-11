@@ -33,7 +33,7 @@ class ScheduleAdminView(AdminOrLeaderRequiredMixin, TemplateView):
 
     def _schedule_queryset(self):
         queryset = Schedule.objects.select_related("monitor", "monitor__user").filter(
-            monitor__in=visible_monitors_for_user(self.request.user)
+            monitor__in=visible_monitors_for_user(self.request.user).filter(is_active=True)
         )
         search = self.request.GET.get("q", "").strip()
         monitor_id = self.request.GET.get("monitor", "").strip()
@@ -71,7 +71,9 @@ class ScheduleAdminView(AdminOrLeaderRequiredMixin, TemplateView):
         if not schedule_id:
             return None
         return get_object_or_404(
-            Schedule.objects.select_related("monitor").filter(monitor__in=visible_monitors_for_user(self.request.user)),
+            Schedule.objects.select_related("monitor").filter(
+                monitor__in=visible_monitors_for_user(self.request.user).filter(is_active=True)
+            ),
             pk=schedule_id,
         )
 
@@ -138,7 +140,7 @@ class ScheduleAdminView(AdminOrLeaderRequiredMixin, TemplateView):
                     "total": self._schedule_queryset().count(),
                     "active": self._schedule_queryset().filter(is_active=True).count(),
                     "inactive": self._schedule_queryset().filter(is_active=False).count(),
-                    "monitors": visible_monitors_for_user(self.request.user).filter(schedules__isnull=False).distinct().count(),
+                    "monitors": visible_monitors_for_user(self.request.user).filter(is_active=True, schedules__isnull=False).distinct().count(),
                 },
                 **pagination,
                 **self._calendar_context(),
@@ -164,7 +166,7 @@ class ScheduleAdminView(AdminOrLeaderRequiredMixin, TemplateView):
 
         if action == "delete":
             schedule = get_object_or_404(
-                Schedule.objects.filter(monitor__in=visible_monitors_for_user(request.user)),
+                Schedule.objects.filter(monitor__in=visible_monitors_for_user(request.user).filter(is_active=True)),
                 pk=request.POST.get("schedule_id"),
             )
             delete_schedule(schedule=schedule)
@@ -174,7 +176,7 @@ class ScheduleAdminView(AdminOrLeaderRequiredMixin, TemplateView):
         instance = None
         if request.POST.get("schedule_id"):
             instance = get_object_or_404(
-                Schedule.objects.filter(monitor__in=visible_monitors_for_user(request.user)),
+                Schedule.objects.filter(monitor__in=visible_monitors_for_user(request.user).filter(is_active=True)),
                 pk=request.POST.get("schedule_id"),
             )
         monitors = visible_monitors_for_user(request.user).filter(is_active=True).order_by("full_name")

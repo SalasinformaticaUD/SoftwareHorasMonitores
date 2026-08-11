@@ -4,13 +4,14 @@ from io import BytesIO
 import pytest
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.urls import reverse
 from openpyxl import Workbook
 
 from apps.common.choices import DepartmentChoices, UserRoleChoices
 from apps.schedules.forms import ScheduleForm
 from apps.schedules.models import Schedule
 from apps.schedules.services import import_schedule_rows_from_workbook, save_schedule
-from tests.factories import MonitorFactory, UserFactory
+from tests.factories import AdminUserFactory, MonitorFactory, ScheduleFactory, UserFactory
 
 
 def build_schedule_rows_workbook(rows):
@@ -174,3 +175,20 @@ def test_schedule_form_rejects_am_pm_times():
 
     assert form.is_valid() is False
     assert "start_time" in form.errors
+
+
+@pytest.mark.django_db
+def test_schedule_admin_hides_historical_monitor_schedules(client):
+    admin = AdminUserFactory()
+    historical_monitor = MonitorFactory(full_name="Historico Monitor", is_active=False)
+    active_monitor = MonitorFactory(full_name="Actual Monitor", is_active=True)
+    ScheduleFactory(monitor=historical_monitor, location="Lab Historico", is_active=False)
+    ScheduleFactory(monitor=active_monitor, location="Lab Actual")
+    client.force_login(admin)
+
+    response = client.get(reverse("admin-schedules"))
+    content = response.content.decode()
+
+    assert response.status_code == 200
+    assert "Lab Actual" in content
+    assert "Lab Historico" not in content

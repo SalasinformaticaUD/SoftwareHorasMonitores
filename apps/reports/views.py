@@ -43,6 +43,7 @@ from apps.reports.services import (
     signed_commitment_act_for_monitor,
 )
 from apps.reports.models import MonitorMemorandum
+from apps.schedules.models import Schedule
 from django.core.exceptions import ValidationError
 
 
@@ -637,12 +638,14 @@ class MonitorSelfHoursView(MonitorRequiredMixin, TemplateView):
         proyecto = monitor.get_proyecto_curricular_display() if monitor and monitor.proyecto_curricular else None
         context["result"] = monitor_lookup_result(monitor=monitor) if monitor else None
         if context["result"]:
+            assigned_schedules = Schedule.objects.filter(monitor=monitor).order_by("weekday", "start_time")
             context["result"]["año"] = datetime.now().year # Agregar año actual al resultado para usar en la plantilla
             context["result"]["monitor_name"] = monitor.full_name.replace(" ", "_")  # Agregar nombre completo del monitor al resultado para usar en la plantilla
             context["result"]["compromise_act_url"] = reverse("monitor-commitment-act-pdf")
             context["result"]["proyecto"] = proyecto
             context["result"]["profiles"] = profiles
             context["result"]["is_current_semester"] = bool(monitor.is_active)
+            context["result"]["assigned_schedules"] = assigned_schedules
         context.update(
             {
                 "upload_form": kwargs.get("upload_form") or MonitorActaCompromisoUploadForm(),

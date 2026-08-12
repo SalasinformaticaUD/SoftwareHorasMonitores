@@ -8,6 +8,7 @@ from django.urls import reverse
 from openpyxl import Workbook
 
 from apps.common.choices import DepartmentChoices, UserRoleChoices
+from apps.monitors.models import AcademicSemester
 from apps.schedules.forms import ScheduleForm
 from apps.schedules.models import Schedule
 from apps.schedules.services import import_schedule_rows_from_workbook, save_schedule
@@ -88,6 +89,45 @@ def test_import_schedule_rows_matches_monitor_by_email_and_reports_missing_monit
     assert schedule.grupo == "G2"
     assert schedule.docente == "Docente Dos"
     assert schedule.proyecto_curricular == "ingenieria_electrica"
+
+
+@pytest.mark.django_db
+def test_import_schedule_rows_uses_active_monitor_when_email_has_history():
+    user = UserFactory(
+        username="repeating.schedule@example.edu",
+        email="repeating.schedule@example.edu",
+        role=UserRoleChoices.MONITOR,
+        department=DepartmentChoices.PHYSICS,
+        is_staff=False,
+    )
+    historical_semester = AcademicSemester.objects.create(name="2025-3", is_active=False)
+    current_semester, _created = AcademicSemester.objects.get_or_create(name="2026-1", defaults={"is_active": True})
+    historical_monitor = MonitorFactory(
+        user=user,
+        semester=historical_semester,
+        codigo_estudiante="202099999",
+        department=DepartmentChoices.PHYSICS,
+        is_active=False,
+    )
+    active_monitor = MonitorFactory(
+        user=user,
+        semester=current_semester,
+        codigo_estudiante="202300001",
+        department=DepartmentChoices.PHYSICS,
+        is_active=True,
+    )
+    workbook = build_schedule_rows_workbook(
+        [
+            ["email_monitor", "day", "start_time", "end_time", "location"],
+            [user.email, "lunes", "08:00", "10:00", "Lab Actual"],
+        ]
+    )
+
+    result = import_schedule_rows_from_workbook(uploaded_file=workbook)
+
+    assert result.created == 1
+    assert Schedule.objects.filter(monitor=active_monitor, location="Lab Actual").exists()
+    assert not Schedule.objects.filter(monitor=historical_monitor, location="Lab Actual").exists()
 
 
 @pytest.mark.django_db

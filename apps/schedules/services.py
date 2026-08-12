@@ -434,9 +434,9 @@ def import_schedule_rows_from_workbook(*, uploaded_file, actor=None) -> Schedule
         try:
             if not monitor_email:
                 raise ValidationError("El correo del monitor es obligatorio.")
-            monitors = Monitor.objects.select_related("user")
+            monitors = Monitor.objects.select_related("user").filter(is_active=True)
             if actor:
-                monitors = visible_monitors_for_user(actor).select_related("user")
+                monitors = visible_monitors_for_user(actor).select_related("user").filter(is_active=True)
             monitor = monitors.filter(user__email__iexact=monitor_email).first()
             if monitor is None:
                 result.skipped.append(

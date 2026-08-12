@@ -4,8 +4,10 @@ from types import SimpleNamespace
 import pytest
 from django.test import RequestFactory
 from django.template.loader import render_to_string
+from django.urls import reverse
 
-from apps.common.choices import OvertimeStatusChoices, SessionStateChoices
+from apps.common.choices import OvertimeStatusChoices, SessionStateChoices, UserRoleChoices
+from apps.monitors.models import AcademicSemester
 from apps.reports.selectors import build_session_timeline_rows, monitor_lookup_result
 from tests.factories import MonitorFactory, ScheduleFactory, UserFactory, WorkSessionFactory
 
@@ -232,3 +234,43 @@ def test_monitor_self_hours_template_uses_day_group_records():
     assert "Ver registros" in html
     assert 'id="record-day-2026-04-30"' in html
     assert "Historial reciente" not in html
+
+
+@pytest.mark.django_db
+def test_monitor_self_hours_shows_schedules_for_selected_semester(client):
+    user = UserFactory(
+        username="repeat.monitor@example.edu",
+        email="repeat.monitor@example.edu",
+        role=UserRoleChoices.MONITOR,
+        is_staff=False,
+    )
+    historical_semester = AcademicSemester.objects.create(name="2025-3", is_active=False)
+    current_semester, _created = AcademicSemester.objects.get_or_create(name="2026-1", defaults={"is_active": True})
+    historical_monitor = MonitorFactory(
+        user=user,
+        semester=historical_semester,
+        codigo_estudiante="202099998",
+        is_active=False,
+    )
+    current_monitor = MonitorFactory(
+        user=user,
+        semester=current_semester,
+        codigo_estudiante="202399998",
+        is_active=True,
+    )
+    ScheduleFactory(monitor=historical_monitor, location="Lab Historico", is_active=False)
+    ScheduleFactory(monitor=current_monitor, location="Lab Actual", is_active=True)
+    client.force_login(user)
+
+    historical_response = client.get(reverse("monitor-hours"), {"monitor_id": historical_monitor.id})
+    historical_content = historical_response.content.decode()
+    current_response = client.get(reverse("monitor-hours"))
+    current_content = current_response.content.decode()
+
+    assert historical_response.status_code == 200
+    assert "Lab Historico" in historical_content
+    assert "Lab Actual" not in historical_content
+    assert "2025-3" in historical_content
+    assert current_response.status_code == 200
+    assert "Lab Actual" in current_content
+    assert "Lab Historico" not in current_content

@@ -575,7 +575,7 @@ def generate_lateness_memorandum_pdf(*, monitor, late_count: int) -> bytes:
  
     meta_rows = [
         _meta_row("DE:", "COORDINADOR DE LABORATORIOS-FACULTAD DE INGENIERÍA"),
-        [Paragraph("", normal), Paragraph("Ing. EDILBERTO SUÁREZ TORRES", bold_label)],
+        [Paragraph("", normal), Paragraph("Ing. MIGUEL ANTONIO AVILA ANGULO", bold_label)],
         _meta_row("PARA:", f"{escape(monitor.full_name)} - <b>Código: {escape(monitor.codigo_estudiante)}</b>"),
         [Paragraph("", normal), Paragraph(f"Monitor – {escape(monitor.get_department_display())}", normal)],
         _meta_row("ASUNTO:", "LLAMADO DE ATENCIÓN"),
@@ -646,7 +646,7 @@ def generate_lateness_memorandum_pdf(*, monitor, late_count: int) -> bytes:
     story.append(Paragraph("Cordialmente,", normal))
     story.append(Spacer(1, 36))
  
-    story.append(Paragraph("<b>ING. EDILBERTO SUÁREZ TORRES</b>", normal))
+    story.append(Paragraph("<b>ING. MIGUEL ANTONIO AVILA ANGULO</b>", normal))
     story.append(Paragraph("Coordinador Laboratorios", normal))
     story.append(Paragraph("Facultad de Ingeniería", normal))
     story.append(Spacer(1, 14))

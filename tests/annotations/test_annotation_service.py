@@ -2,6 +2,7 @@ import pytest
 from django.core.exceptions import ValidationError
 
 from apps.annotations.services import create_annotation, delete_annotation, update_annotation
+from apps.monitors.models import AcademicSemester
 from tests.factories import MonitorFactory, UserFactory
 
 
@@ -100,5 +101,27 @@ def test_annotation_rejects_more_than_24_hours_even_outside_form():
             description="Carga imposible.",
             action="add",
             delta_minutes=3000,
+            occurred_on="2026-04-13",
+        )
+
+
+@pytest.mark.django_db
+def test_annotation_rejects_historical_monitor_even_outside_form():
+    leader = UserFactory()
+    old_semester = AcademicSemester.objects.create(name="2025-3", is_active=False)
+    old_monitor = MonitorFactory(
+        semester=old_semester,
+        department=leader.department,
+        is_active=True,
+    )
+
+    with pytest.raises(ValidationError, match="semestre actual"):
+        create_annotation(
+            leader=leader,
+            monitor=old_monitor,
+            annotation_type="virtual_hours",
+            description="Ajuste sobre un monitor historico.",
+            action="add",
+            delta_minutes=60,
             occurred_on="2026-04-13",
         )

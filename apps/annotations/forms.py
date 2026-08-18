@@ -4,7 +4,7 @@ from django import forms
 
 from apps.common.choices import AnnotationActionChoices, AnnotationTypeChoices
 from apps.monitors.models import Monitor
-from apps.monitors.selectors import visible_monitors_for_user
+from apps.monitors.selectors import visible_current_monitors_for_user
 
 
 class AnnotationAdjustmentForm(forms.Form):
@@ -41,7 +41,11 @@ class AnnotationAdjustmentForm(forms.Form):
         self.actor = actor
         self.instance = instance
         super().__init__(*args, **kwargs)
-        self.fields["monitor"].queryset = visible_monitors_for_user(actor).order_by("full_name") if actor else self.fields["monitor"].queryset
+        self.fields["monitor"].queryset = (
+            visible_current_monitors_for_user(actor).order_by("full_name")
+            if actor
+            else self.fields["monitor"].queryset
+        )
         for field in self.fields.values():
             if isinstance(field.widget, forms.Select):
                 field.widget.attrs["class"] = "form-select"

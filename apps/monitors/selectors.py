@@ -15,6 +15,14 @@ def visible_monitors_for_user(user) -> QuerySet[Monitor]:
     return queryset.filter(department=user.department)
 
 
+def visible_current_monitors_for_user(user) -> QuerySet[Monitor]:
+    queryset = visible_monitors_for_user(user).filter(
+        is_active=True,
+        semester__is_active=True,
+    )
+    return queryset
+
+
 def active_monitor_by_code(code: str) -> Optional[Monitor]:
     return Monitor.objects.filter(
         codigo_estudiante=code,

@@ -5,8 +5,10 @@ from apps.common.choices import UserRoleChoices
 
 
 def visible_annotations_for_user(user) -> QuerySet[Annotation]:
-    queryset = Annotation.objects.select_related("leader", "monitor", "session").filter(monitor__is_active=True)
+    queryset = Annotation.objects.select_related("leader", "monitor", "session").filter(
+        monitor__is_active=True,
+        monitor__semester__is_active=True,
+    )
     if user.role == UserRoleChoices.ADMIN:
         return queryset
     return queryset.filter(department=user.department)
-

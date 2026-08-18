@@ -9,6 +9,11 @@ from apps.attendance.models import AttendanceInconsistency
 from apps.common.choices import AttendanceInconsistencyStatusChoices
 
 
+def _validate_current_monitor(monitor) -> None:
+    if not monitor.is_active or not monitor.semester_id or not monitor.semester.is_active:
+        raise ValidationError("Solo puedes anotar monitores activos del semestre actual.")
+
+
 def create_annotation(
     *,
     leader,
@@ -22,6 +27,7 @@ def create_annotation(
 ) -> Annotation:
     if not department_allowed(leader, monitor.department):
         raise ValidationError("No puedes anotar monitores de otra dependencia.")
+    _validate_current_monitor(monitor)
     annotation = Annotation(
         leader=leader,
         monitor=monitor,
@@ -65,6 +71,7 @@ def update_annotation(
         raise ValidationError("No puedes editar anotaciones de otra dependencia.")
     if not department_allowed(actor, monitor.department):
         raise ValidationError("No puedes anotar monitores de otra dependencia.")
+    _validate_current_monitor(monitor)
 
     annotation.monitor = monitor
     annotation.session = session

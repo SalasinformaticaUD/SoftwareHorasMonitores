@@ -17,6 +17,12 @@ PROJECT_CHOICES = (
 
 
 class Monitor(BaseModel):
+    usuario_externo_id = models.UUIDField(
+        null=True,
+        blank=True,
+        unique=True,
+        help_text="UUID del usuario vinculado en la plataforma de Gestión de Aulas.",
+    )
     semester = models.ForeignKey(
         "monitors.AcademicSemester",
         null=True,

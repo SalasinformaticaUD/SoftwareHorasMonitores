@@ -65,6 +65,19 @@ La arquitectura resumida esta en `docs/architecture.md`.
 - `GET /api/schema/`
 - `GET /api/docs/`
 
+## Integración con Gestión de Aulas
+
+La integración mantiene bases de datos separadas y usa HTTP. Para el cliente de
+Gestión de Aulas están disponibles estas rutas sin prefijo:
+
+- `GET /health`: estado de la API.
+- `GET /usuarios/{usuarioExternoId}`: vínculo puntual de un usuario central con
+  un monitor. Devuelve `{ id, usuarioExternoId, nombre, estado }` o `404` cuando
+  el usuario no tiene monitor asociado.
+
+`usuarioExternoId` es el UUID de Gestión de Aulas guardado de forma opcional y
+única en cada monitor. Las rutas funcionales existentes de Monitores no cambian.
+
 ## Arranque rapido con Docker
 
 1. Ajusta las variables de entorno en `.env`.

@@ -33,6 +33,7 @@ from apps.reports.views import (
 from apps.users.views import RoleAwareLoginView
 from apps.schedules.views import ScheduleExceptionListView
 from apps.monitors.views import MonitorAdminView, MonitorMemorandumDownloadView, SemesterResetView
+from apps.monitors.integration_views import monitor_for_external_user
 from apps.schedules.views import ScheduleAdminView
 from apps.work_sessions.views import InconsistencyManagementView, OvertimeReviewListView
 from apps.annotations.views import AnnotationManagementView
@@ -51,6 +52,13 @@ def root_redirect(_request):
 
 urlpatterns = [
     path("", root_redirect, name="root"),
+    # Contrato consumido por Gestión de Aulas; conserva las rutas existentes.
+    path("health", health_check, name="integration-health"),
+    path(
+        "usuarios/<uuid:usuario_externo_id>",
+        monitor_for_external_user,
+        name="integration-monitor-user",
+    ),
     path("healthz/", health_check, name="healthz"),
     path("admin/monitors/", MonitorAdminView.as_view(), name="admin-monitors"),
     path("admin/monitors/iniciar-semestre/", SemesterResetView.as_view(), name="admin-semester-reset"),

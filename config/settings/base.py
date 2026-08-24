@@ -14,16 +14,17 @@ SECRET_KEY = env("SECRET_KEY", default="unsafe-secret-key")
 DEBUG = env("DEBUG")
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost", "127.0.0.1","10.20.150.11","192.168.56.1"])
 CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
+CORS_ALLOWED_ORIGINS = env.list("FRONTEND_URL", default=[])
+PLATFORM_JWT_SECRET = env("PLATFORM_JWT_SECRET", default="")
+PLATFORM_API_URL = env("PLATFORM_API_URL", default="")
+MONITORES_SERVICE_TOKEN = env("MONITORES_SERVICE_TOKEN", default="")
+PLATFORM_API_TIMEOUT_SECONDS = env.float("PLATFORM_API_TIMEOUT_SECONDS", default=5)
 APP_ENV = env("APP_ENV", default="local")
 LOG_LEVEL = env("LOG_LEVEL", default="INFO")
 
 INSTALLED_APPS = [
-    "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
-    "django.contrib.sessions",
-    "django.contrib.messages",
-    "django.contrib.staticfiles",
     "rest_framework",
     "drf_spectacular",
     "apps.common",
@@ -39,31 +40,12 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
-    "django.contrib.sessions.middleware.SessionMiddleware",
+    "apps.common.middleware.PlatformCorsMiddleware",
     "django.middleware.common.CommonMiddleware",
-    "django.middleware.csrf.CsrfViewMiddleware",
-    "django.contrib.auth.middleware.AuthenticationMiddleware",
-    "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
-
-TEMPLATES = [
-    {
-        "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [BASE_DIR / "templates"],
-        "APP_DIRS": True,
-        "OPTIONS": {
-            "context_processors": [
-                "django.template.context_processors.debug",
-                "django.template.context_processors.request",
-                "django.contrib.auth.context_processors.auth",
-                "django.contrib.messages.context_processors.messages",
-            ],
-        },
-    },
-]
 
 WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
@@ -89,18 +71,12 @@ TIME_ZONE = env("TIME_ZONE", default="America/Bogota")
 USE_I18N = True
 USE_TZ = True
 
-STATIC_URL = "/static/"
-STATIC_ROOT = BASE_DIR / "staticfiles"
-STATICFILES_DIRS = [BASE_DIR / "static"]
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 AUTH_USER_MODEL = "users.User"
 
-LOGIN_URL = "login"
-LOGIN_REDIRECT_URL = "leader-dashboard"
-LOGOUT_REDIRECT_URL = "login"
 PUBLIC_LOOKUP_LIMIT = 10
 PUBLIC_LOOKUP_WINDOW_SECONDS = 3600
 
@@ -113,8 +89,7 @@ CACHES = {
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework.authentication.SessionAuthentication",
-        "rest_framework.authentication.BasicAuthentication",
+        "apps.common.authentication.PlatformJWTAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",

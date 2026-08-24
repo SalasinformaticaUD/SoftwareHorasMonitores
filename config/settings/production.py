@@ -2,14 +2,6 @@ from .base import *  # noqa: F403,F401
 
 DEBUG = False
 
-MIDDLEWARE = [  # noqa: F405
-    MIDDLEWARE[0],  # noqa: F405
-    "whitenoise.middleware.WhiteNoiseMiddleware",
-    *MIDDLEWARE[1:],  # noqa: F405
-]
-
-STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
-
 USE_X_FORWARDED_HOST = env.bool("USE_X_FORWARDED_HOST", default=False)  # noqa: F405
 USE_X_FORWARDED_PORT = env.bool("USE_X_FORWARDED_PORT", default=False)  # noqa: F405
 

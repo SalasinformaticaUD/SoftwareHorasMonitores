@@ -19,6 +19,13 @@ class MonitoresUserManager(UserManager):
 class User(AbstractUser, BaseModel):
     objects = MonitoresUserManager()
 
+    usuario_externo_id = models.UUIDField(
+        null=True,
+        blank=True,
+        unique=True,
+        help_text="UUID del usuario autenticado por la plataforma central.",
+    )
+
     role = models.CharField(
         max_length=20,
         choices=UserRoleChoices.choices,

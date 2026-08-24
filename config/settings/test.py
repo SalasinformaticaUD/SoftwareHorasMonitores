@@ -5,6 +5,10 @@ PASSWORD_HASHERS = [
 ]
 
 EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
+REST_FRAMEWORK["DEFAULT_AUTHENTICATION_CLASSES"] += [  # noqa: F405
+    "rest_framework.authentication.SessionAuthentication",
+    "rest_framework.authentication.BasicAuthentication",
+]
 
 DATABASES = {  # noqa: F405
     "default": {

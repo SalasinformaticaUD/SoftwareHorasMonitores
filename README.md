@@ -32,22 +32,17 @@ Backend-first para gestion de horas de monitores universitarios con Django, Djan
 
 La arquitectura resumida esta en `docs/architecture.md`.
 
-## Rutas web
+## Aplicación API-first
 
-- `GET /login/`
-- `POST /logout/`
-- `GET /dashboard/`
-- `GET|POST /imports/upload/`
-- `GET|POST /imports/reconciliation/`
-- `GET|POST /overtime/review/`
-- `GET|POST /consulta/`
-- `GET /admin/`
+El frontend heredado de Django está desactivado por defecto. El frontend general de
+Software Monitorías consume esta API con el JWT emitido por Gestión de Aulas. La guía
+de configuración, endpoints y flujo está en
+[docs/integracion-plataforma.md](docs/integracion-plataforma.md).
 
 ## API principal
 
-- `POST /api/v1/auth/login/`
-- `POST /api/v1/auth/logout/`
-- `GET /api/v1/auth/me/`
+- La autenticación se realiza en Gestión de Aulas; Monitores recibe `Authorization: Bearer <JWT>`.
+- `GET /api/v1/platform/me/`
 - `GET|POST /api/v1/monitors/`
 - `GET|POST /api/v1/schedules/`
 - `GET|POST /api/v1/attendance/imports/`
@@ -104,6 +99,8 @@ Gestión de Aulas están disponibles estas rutas sin prefijo:
 - `TIME_ZONE`
 - `IMPORT_DROPZONE_PATH`
 - `SEED_DEFAULT_PASSWORD`
+- `PLATFORM_JWT_SECRET` (mismo secreto JWT de Gestión de Aulas)
+- `FRONTEND_URL` (orígenes permitidos por CORS, separados por coma)
 
 ## Usuarios semilla
 

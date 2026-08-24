@@ -7,6 +7,7 @@ activacion usando el mecanismo de restablecimiento de contrasena de Django.
 
 from dataclasses import dataclass, field
 from typing import Any
+from uuid import UUID
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import PasswordResetForm
@@ -231,6 +232,8 @@ def create_monitor_with_user(
     request=None,
     actor=None,
     confirm_repeating_monitor: bool = False,
+    usuario_externo_id: UUID | None = None,
+    send_activation: bool = True,
 ) -> Monitor:
     """Crea un monitor y su usuario local vinculado.
 
@@ -293,6 +296,8 @@ def create_monitor_with_user(
             user.set_unusable_password()
         if user.role != UserRoleChoices.MONITOR:
             raise ValidationError("Ya existe una cuenta no monitor con este correo.")
+        if usuario_externo_id and user.usuario_externo_id and user.usuario_externo_id != usuario_externo_id:
+            raise ValidationError("La cuenta local ya está vinculada a otro usuario de plataforma.")
         if Monitor.objects.filter(user=user, is_active=True).exists():
             raise ValidationError("Esta cuenta ya tiene un monitor activo en el semestre actual.")
         user.username = email
@@ -304,6 +309,8 @@ def create_monitor_with_user(
         user.is_staff = False
         user.is_superuser = False
         user.is_active = True
+        if usuario_externo_id:
+            user.usuario_externo_id = usuario_externo_id
         user.full_clean()
         user.save()
 
@@ -317,10 +324,11 @@ def create_monitor_with_user(
             telefono=telefono,
             department=department,
             is_active=True,
+            usuario_externo_id=usuario_externo_id,
         )
         monitor.full_clean()
         monitor.save()
-    if user_created or not user.has_usable_password():
+    if send_activation and (user_created or not user.has_usable_password()):
         send_monitor_activation_email(user=user, request=request)
     return monitor
 

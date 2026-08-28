@@ -8,7 +8,7 @@ from apps.attendance.models import AttendanceImportJob, AttendanceInconsistency,
 
 def _department_tokens(department: str) -> List[str]:
     mapping = {
-        "physics": ["fisica", "physics"],
+        "physics": ["fisica", "monitores fisica", "physics"],
         "informatics_labs": [
             "informatica",
             "salas de informatica",
@@ -16,7 +16,7 @@ def _department_tokens(department: str) -> List[str]:
             "monitores aulas de software",
             "informatics labs",
         ],
-        "electrical": ["electrica", "electrical"],
+        "electrical": ["electrica", "monitores laboratorios", "laboratorios", "electrical"],
     }
     return mapping.get(department, [department])
 

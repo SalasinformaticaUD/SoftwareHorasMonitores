@@ -48,7 +48,7 @@
             <th>Dependencia</th>
             <th>Fecha</th>
             <th>Motivo</th>
-            <th>Asignar monitor</th>
+            <th>Acción</th>
           </tr>
           <tr>
             <th>
@@ -97,17 +97,21 @@
               <td>{{ record.work_day }}</td>
               <td>{{ record.manual_review_reason }}</td>
               <td>
-                <form method="post" class="d-flex flex-wrap gap-2 reconciliation-action">
-                  {% csrf_token %}
-                  <input type="hidden" name="raw_record_id" value="{{ record.id }}">
-                  <select class="form-select form-select-sm" name="monitor_id" required>
-                    <option value="">Selecciona</option>
-                    {% for monitor in monitor_options %}
-                      <option value="{{ monitor.id }}">{{ monitor.full_name }}</option>
-                    {% endfor %}
-                  </select>
-                  <button class="btn btn-sm btn-primary" type="submit">Vincular</button>
-                </form>
+                {% if can_reconcile %}
+                  <form method="post" class="d-flex flex-wrap gap-2 reconciliation-action">
+                    {% csrf_token %}
+                    <input type="hidden" name="raw_record_id" value="{{ record.id }}">
+                    <select class="form-select form-select-sm" name="monitor_id" required>
+                      <option value="">Selecciona</option>
+                      {% for monitor in monitor_options %}
+                        <option value="{{ monitor.id }}">{{ monitor.full_name }}</option>
+                      {% endfor %}
+                    </select>
+                    <button class="btn btn-sm btn-primary" type="submit">Vincular</button>
+                  </form>
+                {% else %}
+                  <span class="text-muted small">Verifique con el administrador del aplicativo.</span>
+                {% endif %}
               </td>
             </tr>
           {% empty %}

@@ -12,6 +12,7 @@ from apps.attendance.services import (
 )
 from apps.attendance.selectors import (
     pending_inconsistencies_for_user,
+    pending_reconciliation_records_for_user,
     visible_inconsistencies_for_user,
 )
 from apps.common.choices import (
@@ -20,6 +21,7 @@ from apps.common.choices import (
     AttendanceInconsistencyStatusChoices,
     AttendanceInconsistencyTypeChoices,
     AttendancePairingStatusChoices,
+    DepartmentChoices,
     ReconciliationStatusChoices,
 )
 from tests.factories import AnnotationFactory, AttendanceImportJobFactory, MonitorFactory, UserFactory
@@ -90,6 +92,24 @@ def test_resolved_duplicate_marks_do_not_appear_in_pending_inconsistencies():
         inconsistency_type=AttendanceInconsistencyTypeChoices.DUPLICATE_MARK,
         status=AttendanceInconsistencyStatusChoices.RESOLVED,
     ).exists()
+
+
+@pytest.mark.django_db
+def test_electrical_leader_sees_manual_review_records_for_laboratories_label():
+    leader = UserFactory(department=DepartmentChoices.ELECTRICAL)
+    import_job = AttendanceImportJobFactory(uploaded_by=leader)
+    raw_record = AttendanceRawRecord.objects.create(
+        import_job=import_job,
+        row_number=2,
+        raw_full_name="ANDRES FELIPE GONZALEZ GONZALEZ",
+        raw_department="Monitores Laboratorios",
+        work_day=date(2026, 4, 13),
+        event_at=timezone.make_aware(datetime(2026, 4, 13, 8, 0)),
+        reconciliation_status=ReconciliationStatusChoices.MANUAL_REVIEW,
+        manual_review_reason="No se encontro monitor por nombre y dependencia.",
+    )
+
+    assert pending_reconciliation_records_for_user(leader).filter(pk=raw_record.pk).exists()
 
 
 @pytest.mark.django_db

@@ -65,10 +65,17 @@ class ReconciliationQueueView(AdminOrLeaderRequiredMixin, TemplateView):
             monitors = Monitor.objects.filter(is_active=True)
         context["records"] = records
         context["monitor_options"] = monitors.order_by("full_name")
+        context["can_reconcile"] = self.request.user.role == UserRoleChoices.ADMIN
         return context
 
     def post(self, request, *args, **kwargs):
-        raw_record = get_object_or_404(AttendanceRawRecord, pk=request.POST.get("raw_record_id"))
+        if request.user.role != UserRoleChoices.ADMIN:
+            messages.warning(request, "Verifique con el administrador del aplicativo.")
+            return redirect("attendance-reconciliation")
+        raw_record = get_object_or_404(
+            pending_reconciliation_records_for_user(request.user),
+            pk=request.POST.get("raw_record_id"),
+        )
         monitor = get_object_or_404(Monitor, pk=request.POST.get("monitor_id"), is_active=True)
         try:
             assign_monitor_manually(raw_record=raw_record, monitor=monitor, actor=request.user)

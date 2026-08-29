@@ -6,11 +6,15 @@ from django.urls import reverse
 from apps.common.choices import DepartmentChoices, UserRoleChoices
 from apps.reports.pdf import (
     ActDocumentData,
+    COMPROMISO_FISICA_ITEMS,
+    ElectricalLabsCommitmentActPdfGenerator,
     SoftwareRoomsCommitmentActPdfGenerator,
     commitment_act_generator_for_department,
+    format_semester_label,
     generate_act_pdf,
     ActaCompromisoData,
 )
+from apps.monitors.models import AcademicSemester
 from tests.factories import MonitorFactory, ScheduleFactory, UserFactory
 
 
@@ -46,8 +50,35 @@ def test_software_rooms_dependency_uses_specific_generator():
     assert generator_class is SoftwareRoomsCommitmentActPdfGenerator
 
 
+def test_numeric_semester_label_is_rendered_with_roman_period():
+    assert format_semester_label("2026-3") == "2026-III"
+
+
+def test_electrical_commitment_act_uses_the_2026_iii_template_content():
+    generator = ElectricalLabsCommitmentActPdfGenerator(
+        ActaCompromisoData(
+            semestre="2026-III",
+            nombre_completo="Monitor de prueba",
+            codigo="20260000",
+            correo="monitor@example.edu",
+        )
+    )
+
+    assert len(generator.commitment_items) == 5
+    assert len(generator.activity_items) == 14
+    assert len(generator.duty_items) == 15
+    assert len(generator.sanction_items) == 10
+    assert generator.commitment_heading.endswith(".")
+    assert generator.duty_heading.endswith(".")
+    assert "período académico 2026-III" in generator.commitment_items[3][1]
+    assert "devolución del chaleco" in generator.commitment_items[4][1]
+    assert "No portar el chaleco" in generator.sanction_items[-1][1]
+
+
 @pytest.mark.django_db
 def test_monitor_can_download_personalized_commitment_act(client):
+    AcademicSemester.objects.update(is_active=False)
+    semester = AcademicSemester.objects.create(name="2026-3", is_active=True)
     user = UserFactory(
         username="monitor@example.edu",
         email="monitor@example.edu",
@@ -63,6 +94,7 @@ def test_monitor_can_download_personalized_commitment_act(client):
         proyecto_curricular="ingenieria_sistemas",
         telefono="3001234567",
         department=DepartmentChoices.PHYSICS,
+        semester=semester,
     )
     client.force_login(user)
 
@@ -78,10 +110,18 @@ def test_monitor_can_download_personalized_commitment_act(client):
     assert b"Ingenieria de sistemas" in response.content
     assert monitor.telefono.encode("latin-1") in response.content
     assert user.email.encode("latin-1") in response.content
+    assert b"MONITORIAS 2026-III" in response.content
+    assert b"semestre 2026-III" in response.content
+    assert any("Almacén de Laboratorio de Física 504" in item for _number, item in COMPROMISO_FISICA_ITEMS)
+    assert b"Firma responsable" not in response.content
+    assert b"Maria Alejandra Buitrago Pacheco" not in response.content
+    assert "Hellen Viviana Galindo".encode("latin-1") not in response.content
 
 
 @pytest.mark.django_db
 def test_software_rooms_commitment_act_uses_schedule_table_defaults(client):
+    AcademicSemester.objects.update(is_active=False)
+    semester = AcademicSemester.objects.create(name="2026-3", is_active=True)
     user = UserFactory(
         username="software@example.edu",
         email="software@example.edu",
@@ -94,6 +134,7 @@ def test_software_rooms_commitment_act_uses_schedule_table_defaults(client):
         full_name="Carlos Rojas",
         codigo_estudiante="20267777",
         department=DepartmentChoices.INFORMATICS_LABS,
+        semester=semester,
     )
     ScheduleFactory(
         monitor=monitor,
@@ -125,6 +166,8 @@ def test_software_rooms_commitment_act_uses_schedule_table_defaults(client):
 
     assert response.status_code == 200
     assert response.content.startswith(b"%PDF-1.4")
+    assert b"MONITORIAS 2026-III" in response.content
+    assert b"semestre 2026-III" in response.content
 
 
 @pytest.mark.django_db

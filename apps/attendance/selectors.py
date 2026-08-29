@@ -4,6 +4,7 @@ from django.db.models import Q, QuerySet
 from django.utils import timezone
 from apps.common.choices import AttendanceInconsistencyStatusChoices, ReconciliationStatusChoices, UserRoleChoices
 from apps.attendance.models import AttendanceImportJob, AttendanceInconsistency, AttendanceRawRecord
+from apps.monitors.services import get_current_semester
 
 
 def _department_tokens(department: str) -> List[str]:
@@ -58,12 +59,13 @@ def raw_history_for_user(user) -> QuerySet[AttendanceRawRecord]:
 
 
 def visible_inconsistencies_for_user(user) -> QuerySet[AttendanceInconsistency]:
+    current_semester = get_current_semester()
     queryset = AttendanceInconsistency.objects.select_related(
         "raw_record",
         "monitor",
         "validated_by",
         "solution_annotation",
-    )
+    ).filter(monitor__semester=current_semester)
     if user.role == UserRoleChoices.ADMIN:
         return queryset
     return queryset.filter(monitor__department=user.department)

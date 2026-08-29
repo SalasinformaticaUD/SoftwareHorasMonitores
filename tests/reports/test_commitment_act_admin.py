@@ -45,6 +45,8 @@ def test_admin_commitment_acts_view_lists_signed_and_pending(client, tmp_path, s
     assert pending_monitor.full_name in response.content.decode()
     assert "Firmada" in response.content.decode()
     assert "Pendiente" in response.content.decode()
+    assert "Aceptar" in response.content.decode()
+    assert "Rechazar" in response.content.decode()
 
 
 def test_admin_commitment_acts_view_shows_empty_signed_message(client, tmp_path, settings):
@@ -121,3 +123,21 @@ def test_admin_can_accept_and_reject_latest_submission(client, tmp_path, setting
     assert response.status_code == 302
     assert submission.status == CommitmentActStatusChoices.ACCEPTED
     assert submission.rejection_reason == ""
+
+
+def test_admin_can_review_signed_pdf_without_existing_submission(client, tmp_path, settings):
+    settings.MEDIA_ROOT = tmp_path
+    admin = AdminUserFactory()
+    monitor = MonitorFactory(codigo_estudiante="20260009")
+    signed_directory = tmp_path / "actas_compromiso_firmadas"
+    signed_directory.mkdir()
+    signed_file = signed_directory / "Acta_Compromiso_2026_Monitor_20260009.pdf"
+    signed_file.write_bytes(b"%PDF-1.4 signed")
+    client.force_login(admin)
+
+    response = client.post(reverse("admin-commitment-act-review", args=[monitor.id]), {"review_action": "accept"})
+
+    submission = CommitmentActSubmission.objects.get(monitor=monitor)
+    assert response.status_code == 302
+    assert submission.status == CommitmentActStatusChoices.ACCEPTED
+    assert submission.signed_file.name == "actas_compromiso_firmadas/Acta_Compromiso_2026_Monitor_20260009.pdf"

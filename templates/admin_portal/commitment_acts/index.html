@@ -155,7 +155,7 @@
                       <a class="btn btn-sm btn-primary btn-icon" href="{% url 'admin-commitment-act-signed' row.monitor.id %}">
                         Acta firmada
                       </a>
-                      {% if row.submission and row.is_pending %}
+                      {% if row.has_signed and row.is_pending %}
                         <form method="post" action="{% url 'admin-commitment-act-review' row.monitor.id %}" class="d-inline-flex gap-1 align-items-center">
                           {% csrf_token %}
                           <button class="btn btn-sm btn-success" type="submit" name="review_action" value="accept">Aceptar</button>

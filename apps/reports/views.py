@@ -6,6 +6,7 @@ consulta personal del monitor. Las vistas delegan calculos a selectores y
 servicios para mantener separada la logica de presentacion.
 """
 
+from django.conf import settings
 from django.contrib import messages
 from datetime import datetime
 from io import BytesIO
@@ -370,8 +371,12 @@ class CommitmentActReviewView(AdminOrLeaderRequiredMixin, View):
         monitor = get_object_or_404(visible_monitors_for_user(request.user).filter(is_active=True), id=monitor_id)
         submission = monitor.commitment_act_submissions.first()
         if submission is None:
-            messages.error(request, "Este monitor no tiene un envío de acta revisable.")
-            return redirect("admin-commitment-acts")
+            signed_file = signed_commitment_act_for_monitor(monitor)
+            if signed_file is None:
+                messages.error(request, "Este monitor no tiene un envío de acta revisable.")
+                return redirect("admin-commitment-acts")
+            submission = CommitmentActSubmission(monitor=monitor)
+            submission.signed_file.name = str(signed_file.relative_to(settings.MEDIA_ROOT)).replace("\\", "/")
         action = request.POST.get("review_action")
         if action == "accept":
             submission.status = CommitmentActStatusChoices.ACCEPTED

@@ -16,6 +16,7 @@ from apps.common.web import health_check
 from apps.attendance.views import AttendanceImportView, ReconciliationQueueView
 from apps.reports.views import (
     CommitmentActAdminView,
+    CommitmentActReviewView,
     DepartmentDashboardExportView,
     GeneratedCommitmentActAdminDownloadView,
     HistoricalDepartmentSemesterExportView,
@@ -62,6 +63,7 @@ urlpatterns = [
     path("admin/schedules/", ScheduleAdminView.as_view(), name="admin-schedules"),
     path("memorandos/", MemorandumAdminView.as_view(), name="memorandums-manage"),
     path("admin/actas-compromiso/", CommitmentActAdminView.as_view(), name="admin-commitment-acts"),
+    path("admin/actas-compromiso/<uuid:monitor_id>/revisar/", CommitmentActReviewView.as_view(), name="admin-commitment-act-review"),
     path(
         "admin/actas-compromiso/firmadas.zip",
         SignedCommitmentActsBulkDownloadView.as_view(),

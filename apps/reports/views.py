@@ -16,8 +16,8 @@ from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from django.views import View
 from django.views.generic import FormView, TemplateView
-from django.core.files.storage import FileSystemStorage
 from django.db.models import Q
+from django.utils import timezone
 
 
 from apps.common.choices import DepartmentChoices, UserRoleChoices
@@ -35,6 +35,7 @@ from apps.reports.selectors import (
 from apps.reports.pdf import build_monitor_commitment_act_pdf
 from apps.reports.services import (
     build_commitment_act_status_rows,
+    commitment_act_status_for_monitor,
     export_department_dashboard_to_excel,
     export_historical_department_semester_to_excel,
     get_dashboard_export_directory,
@@ -42,7 +43,8 @@ from apps.reports.services import (
     send_lateness_memorandum,
     signed_commitment_act_for_monitor,
 )
-from apps.reports.models import MonitorMemorandum
+from apps.reports.models import CommitmentActSubmission, MonitorMemorandum
+from apps.common.choices import CommitmentActStatusChoices
 from apps.schedules.models import Schedule
 from django.core.exceptions import ValidationError
 
@@ -329,10 +331,14 @@ class CommitmentActAdminView(AdminOrLeaderRequiredMixin, TemplateView):
         rows = build_commitment_act_status_rows(monitors)
         signed_count = sum(1 for row in rows if row.has_signed)
         pending_count = len(rows) - signed_count
-        if status == "signed":
-            rows = [row for row in rows if row.has_signed]
+        if status == "accepted":
+            rows = [row for row in rows if row.is_accepted]
+        elif status == "rejected":
+            rows = [row for row in rows if row.is_rejected]
         elif status == "pending":
-            rows = [row for row in rows if not row.has_signed]
+            rows = [row for row in rows if row.is_pending]
+        elif status == "signed":
+            rows = [row for row in rows if row.has_signed]
 
         pagination = paginate_collection(self.request, rows, per_page=20)
         context.update(
@@ -355,6 +361,32 @@ class CommitmentActAdminView(AdminOrLeaderRequiredMixin, TemplateView):
             }
         )
         return context
+
+
+class CommitmentActReviewView(AdminOrLeaderRequiredMixin, View):
+    """Acepta o rechaza el último envío de acta visible para el revisor."""
+
+    def post(self, request, monitor_id, *args, **kwargs):
+        monitor = get_object_or_404(visible_monitors_for_user(request.user).filter(is_active=True), id=monitor_id)
+        submission = monitor.commitment_act_submissions.first()
+        if submission is None:
+            messages.error(request, "Este monitor no tiene un envío de acta revisable.")
+            return redirect("admin-commitment-acts")
+        action = request.POST.get("review_action")
+        if action == "accept":
+            submission.status = CommitmentActStatusChoices.ACCEPTED
+            submission.rejection_reason = ""
+        elif action == "reject":
+            submission.status = CommitmentActStatusChoices.REJECTED
+            submission.rejection_reason = "Acta rechazada para corrección y nuevo envío."
+        else:
+            messages.error(request, "Acción de revisión no válida.")
+            return redirect("admin-commitment-acts")
+        submission.reviewed_by = request.user
+        submission.reviewed_at = timezone.now()
+        submission.save(update_fields=["status", "rejection_reason", "reviewed_by", "reviewed_at", "updated_at"])
+        messages.success(request, "Acta aceptada correctamente." if action == "accept" else "Acta rechazada. El monitor podrá corregirla y enviarla nuevamente.")
+        return redirect("admin-commitment-acts")
 
 
 class MemorandumAdminView(AdminOrLeaderRequiredMixin, TemplateView):
@@ -646,6 +678,7 @@ class MonitorSelfHoursView(MonitorRequiredMixin, TemplateView):
             context["result"]["profiles"] = profiles
             context["result"]["is_current_semester"] = bool(monitor.is_active)
             context["result"]["assigned_schedules"] = assigned_schedules
+            context["result"]["commitment_act_status"] = commitment_act_status_for_monitor(monitor)
         context.update(
             {
                 "upload_form": kwargs.get("upload_form") or MonitorActaCompromisoUploadForm(),
@@ -673,8 +706,11 @@ class MonitorSelfHoursView(MonitorRequiredMixin, TemplateView):
             if form.is_valid():
                 try:
                     result = form.cleaned_data["source_file"]
-                    fs = FileSystemStorage(location=str(get_signed_commitment_acts_directory()))
-                    filename = fs.save("Acta_Compromiso_"+str(context["result"]["año"])+"_"+name+"_"+str(context["result"]["monitor"].codigo_estudiante)+".pdf", result)
+                    monitor = context["result"]["monitor"]
+                    filename = "Acta_Compromiso_" + str(context["result"]["año"]) + "_" + name + "_" + str(monitor.codigo_estudiante) + ".pdf"
+                    submission = CommitmentActSubmission(monitor=monitor)
+                    submission.signed_file.save(filename, result, save=False)
+                    submission.save()
                     messages.success(request, f"Acta de compromiso procesada.")
                     return self.render_to_response(self.get_context_data(upload_form=form, upload_result=result))
                 except ValidationError as exc:

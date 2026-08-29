@@ -1,6 +1,11 @@
 from django.db import models
 
+from apps.common.choices import CommitmentActStatusChoices
 from apps.common.models import BaseModel
+
+
+def commitment_act_upload_path(instance, filename):
+    return f"actas_compromiso_firmadas/{filename}"
 
 
 class MonitorReportSnapshot(BaseModel):
@@ -68,3 +73,21 @@ class MonitorMemorandum(BaseModel):
 
     def __str__(self) -> str:
         return f"Memorando {self.late_count_threshold} retardos - {self.monitor}"
+
+
+class CommitmentActSubmission(BaseModel):
+    """Acta firmada enviada por un monitor y su resultado de revisión."""
+
+    monitor = models.ForeignKey("monitors.Monitor", on_delete=models.CASCADE, related_name="commitment_act_submissions")
+    signed_file = models.FileField(upload_to=commitment_act_upload_path)
+    status = models.CharField(max_length=16, choices=CommitmentActStatusChoices.choices, default=CommitmentActStatusChoices.PENDING, db_index=True)
+    rejection_reason = models.TextField(blank=True)
+    reviewed_by = models.ForeignKey("users.User", on_delete=models.SET_NULL, null=True, blank=True, related_name="reviewed_commitment_acts")
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = [models.Index(fields=("monitor", "status"))]
+
+    def __str__(self):
+        return f"Acta {self.monitor} - {self.get_status_display()}"

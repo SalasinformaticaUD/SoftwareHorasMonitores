@@ -70,6 +70,12 @@ class OvertimeStatusChoices(models.TextChoices):
     REJECTED = "rejected", "Rechazada"
 
 
+class CommitmentActStatusChoices(models.TextChoices):
+    PENDING = "pending", "Pendiente de revisión"
+    ACCEPTED = "accepted", "Aceptada"
+    REJECTED = "rejected", "Rechazada"
+
+
 class AnnotationTypeChoices(models.TextChoices):
     MISSING_PUNCH = "missing_punch", "Olvido de registro"
     VIRTUAL_HOURS = "virtual_hours", "Horas virtuales"
@@ -91,4 +97,3 @@ class NotificationEventChoices(models.TextChoices):
     OVERTIME_REVIEWED = "overtime_reviewed", "Horas extra revisadas"
     ANNOTATION_CREATED = "annotation_created", "Anotación creada"
     REPORT_GENERATED = "report_generated", "Reporte generado"
-

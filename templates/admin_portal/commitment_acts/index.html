@@ -11,7 +11,7 @@
   <section class="admin-hero">
     <div>
       <h1 class="admin-title">Actas de compromiso</h1>
-      <p class="admin-subtitle">Consulta que monitores ya subieron su acta firmada y descarga los PDFs registrados en la carpeta institucional.</p>
+      <p class="admin-subtitle">Revisa las actas firmadas enviadas por los monitores y acepta o rechaza cada envío.</p>
     </div>
     <div class="d-flex gap-2 flex-wrap">
       {% if stats.signed %}
@@ -70,8 +70,9 @@
           <label class="form-label" for="act-status">Estado</label>
           <select class="form-select" id="act-status" name="status">
             <option value="">Todos</option>
-            <option value="signed" {% if filters.status == "signed" %}selected{% endif %}>Firmadas</option>
-            <option value="pending" {% if filters.status == "pending" %}selected{% endif %}>Pendientes</option>
+            <option value="pending" {% if filters.status == "pending" %}selected{% endif %}>Pendientes de revisión</option>
+            <option value="accepted" {% if filters.status == "accepted" %}selected{% endif %}>Aceptadas</option>
+            <option value="rejected" {% if filters.status == "rejected" %}selected{% endif %}>Rechazadas</option>
           </select>
         </div>
         {% if request.user.role == "admin" %}
@@ -97,7 +98,7 @@
       <div class="d-flex justify-content-between gap-2 align-items-center mb-3">
         <div>
           <h2 class="h5 mb-1">Seguimiento de firmas</h2>
-          <p class="text-muted small mb-0">El estado se calcula desde los PDFs existentes en media/actas_compromiso_firmadas.</p>
+          <p class="text-muted small mb-0">Las actas nuevas quedan pendientes hasta que un administrador o líder las revise.</p>
         </div>
         <span class="badge text-bg-light">{{ page_obj.paginator.count }} resultados</span>
       </div>
@@ -128,16 +129,19 @@
                 <td>{{ row.monitor.user.email|default:"-" }}</td>
                 <td>{{ row.monitor.get_department_display }}</td>
                 <td>
-                  {% if row.has_signed %}
-                    <span class="badge text-bg-success">Firmada</span>
+                  {% if row.is_accepted %}
+                    <span class="badge text-bg-success">Aceptada</span>
+                  {% elif row.is_rejected %}
+                    <span class="badge text-bg-danger">Rechazada</span>
                   {% else %}
-                    <span class="badge text-bg-warning">Pendiente</span>
+                    <span class="badge text-bg-warning">Pendiente de revisión</span>
                   {% endif %}
                 </td>
                 <td>
                   {% if row.has_signed %}
                     <strong class="d-block text-break">{{ row.signed_file_name }}</strong>
                     <span class="small text-muted">{{ row.uploaded_at|date:"d/m/Y H:i" }}</span>
+                    {% if row.is_rejected %}<div class="small text-danger mt-1"><strong>Motivo:</strong> {{ row.rejection_reason }}</div>{% endif %}
                   {% else %}
                     <span class="text-muted">Sin PDF firmado</span>
                   {% endif %}
@@ -151,6 +155,13 @@
                       <a class="btn btn-sm btn-primary btn-icon" href="{% url 'admin-commitment-act-signed' row.monitor.id %}">
                         <span aria-hidden="true">v</span> Firmada
                       </a>
+                      {% if row.submission and row.is_pending %}
+                        <form method="post" action="{% url 'admin-commitment-act-review' row.monitor.id %}" class="d-inline-flex gap-1 align-items-center">
+                          {% csrf_token %}
+                          <button class="btn btn-sm btn-success" type="submit" name="review_action" value="accept">Aceptar</button>
+                          <button class="btn btn-sm btn-outline-danger" type="submit" name="review_action" value="reject">Rechazar</button>
+                        </form>
+                      {% endif %}
                     {% endif %}
                   </div>
                 </td>

@@ -113,6 +113,15 @@
         <span aria-hidden="true">PDF</span>
         Descargar acta de compromiso
       </a>
+      {% with act_status=result.commitment_act_status %}
+        {% if act_status.is_accepted %}
+          <div class="alert alert-success">Tu acta fue aceptada.</div>
+        {% elif act_status.is_rejected %}
+          <div class="alert alert-danger"><strong>Tu acta fue rechazada.</strong> {{ act_status.rejection_reason }}<br><span class="small">Corrige el documento y envíalo nuevamente.</span></div>
+        {% elif act_status.has_signed %}
+          <div class="alert alert-warning">Tu acta está pendiente de revisión.</div>
+        {% endif %}
+      {% endwith %}
       <p class="mb-0">
       <form method="post" enctype="multipart/form-data" novalidate>
         {% csrf_token %}

@@ -2,8 +2,10 @@ from django.urls import reverse
 import pytest
 from zipfile import ZipFile
 from io import BytesIO
+from django.core.files.uploadedfile import SimpleUploadedFile
 
-from apps.common.choices import DepartmentChoices
+from apps.common.choices import CommitmentActStatusChoices, DepartmentChoices
+from apps.reports.models import CommitmentActSubmission
 from apps.reports.services import build_commitment_act_status_rows
 from tests.factories import AdminUserFactory, MonitorFactory, UserFactory
 
@@ -98,3 +100,24 @@ def test_leader_bulk_downloads_only_visible_signed_acts(client, tmp_path, settin
         names = zip_file.namelist()
     assert any(visible_monitor.codigo_estudiante in name for name in names)
     assert not any(hidden_monitor.codigo_estudiante in name for name in names)
+
+
+def test_admin_can_accept_and_reject_latest_submission(client, tmp_path, settings):
+    settings.MEDIA_ROOT = tmp_path
+    admin = AdminUserFactory()
+    monitor = MonitorFactory(codigo_estudiante="20260008")
+    submission = CommitmentActSubmission(monitor=monitor)
+    submission.signed_file.save("acta_20260008.pdf", SimpleUploadedFile("acta.pdf", b"%PDF-1.4"), save=True)
+    client.force_login(admin)
+
+    response = client.post(reverse("admin-commitment-act-review", args=[monitor.id]), {"review_action": "reject"})
+    submission.refresh_from_db()
+    assert response.status_code == 302
+    assert submission.status == CommitmentActStatusChoices.REJECTED
+    assert submission.rejection_reason == "Acta rechazada para corrección y nuevo envío."
+
+    response = client.post(reverse("admin-commitment-act-review", args=[monitor.id]), {"review_action": "accept"})
+    submission.refresh_from_db()
+    assert response.status_code == 302
+    assert submission.status == CommitmentActStatusChoices.ACCEPTED
+    assert submission.rejection_reason == ""

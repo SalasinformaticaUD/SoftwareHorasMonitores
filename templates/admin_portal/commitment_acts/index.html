@@ -87,7 +87,7 @@
           </div>
         {% endif %}
         <div class="col-md-1 d-grid">
-          <button class="btn btn-primary btn-icon" type="submit" title="Filtrar"><span aria-hidden="true">?</span></button>
+          <button class="btn btn-primary" type="submit" title="Filtrar">Buscar</button>
         </div>
       </form>
     </div>
@@ -149,11 +149,11 @@
                 <td class="text-end">
                   <div class="d-inline-flex flex-wrap justify-content-end gap-2">
                     <a class="btn btn-sm btn-outline-primary btn-icon" href="{% url 'admin-commitment-act-generated' row.monitor.id %}">
-                      <span aria-hidden="true">v</span> Generada
+                      Acta generada
                     </a>
                     {% if row.has_signed %}
                       <a class="btn btn-sm btn-primary btn-icon" href="{% url 'admin-commitment-act-signed' row.monitor.id %}">
-                        <span aria-hidden="true">v</span> Firmada
+                        Acta firmada
                       </a>
                       {% if row.submission and row.is_pending %}
                         <form method="post" action="{% url 'admin-commitment-act-review' row.monitor.id %}" class="d-inline-flex gap-1 align-items-center">

@@ -2,8 +2,20 @@ from django import forms
 
 from apps.attendance.validators import validate_excel_extension
 from apps.common.choices import DepartmentChoices, UserRoleChoices
-from apps.monitors.models import Monitor, PROJECT_CHOICES
+from apps.monitors.models import AcademicSemester, Monitor, PROJECT_CHOICES
+from apps.monitors.selectors import visible_current_monitors_for_user
 from apps.schedules.models import Schedule, ScheduleException
+
+
+class ScheduleMultipleSelect(forms.SelectMultiple):
+    """Expone el monitor dueño de cada bloque para el filtrado dependiente."""
+
+    def create_option(self, name, value, label, selected, index, subindex=None, attrs=None):
+        option = super().create_option(name, value, label, selected, index, subindex, attrs)
+        instance = getattr(value, "instance", None)
+        if instance is not None:
+            option["attrs"]["data-monitor-id"] = str(instance.monitor_id)
+        return option
 
 
 class ScheduleImportForm(forms.Form):
@@ -122,6 +134,9 @@ class ScheduleExceptionForm(forms.ModelForm):
         fields = (
             "name",
             "description",
+            "monitors",
+            "schedules",
+            "all_semester",
             "start_date",
             "end_date",
             "department",
@@ -133,15 +148,33 @@ class ScheduleExceptionForm(forms.ModelForm):
             "start_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
             "end_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
             "description": forms.Textarea(attrs={"rows": 3}),
+            "monitors": forms.SelectMultiple(
+                attrs={
+                    "class": "exception-multi-source",
+                    "data-placeholder": "Seleccionar usuarios",
+                    "data-empty": "No hay usuarios disponibles",
+                    "data-select-all": "true",
+                }
+            ),
+            "schedules": ScheduleMultipleSelect(
+                attrs={
+                    "class": "exception-multi-source",
+                    "data-placeholder": "Seleccionar bloques",
+                    "data-empty": "Selecciona primero uno o varios usuarios",
+                }
+            ),
         }
         labels = {
             "name": "Nombre de la excepción",
             "description": "Descripción",
+            "monitors": "Usuarios incluidos",
+            "schedules": "Bloques horarios",
+            "all_semester": "Todo el semestre académico",
             "start_date": "Fecha inicial",
             "end_date": "Fecha final",
             "department": "Dependencia",
             "ignore_lateness": "No contar retrasos",
-            "approve_overtime": "Contar horas extra",
+            "approve_overtime": "Aprobar horas extra automaticamente",
             "is_active": "Activa",
         }
 
@@ -150,6 +183,23 @@ class ScheduleExceptionForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["start_date"].input_formats = ["%Y-%m-%d"]
         self.fields["end_date"].input_formats = ["%Y-%m-%d"]
+        self.fields["start_date"].required = False
+        self.fields["end_date"].required = False
+        monitors = (
+            visible_current_monitors_for_user(actor)
+            if actor is not None
+            else Monitor.objects.filter(is_active=True, semester__is_active=True)
+        ).select_related("user", "semester").order_by("full_name")
+        self.fields["monitors"].queryset = monitors
+        self.fields["monitors"].required = True
+        self.fields["monitors"].help_text = "Selecciona uno o varios usuarios específicos."
+        self.fields["schedules"].queryset = Schedule.objects.filter(
+            monitor__in=monitors,
+            is_active=True,
+        ).select_related("monitor").order_by("monitor__full_name", "weekday", "start_time")
+        self.fields["schedules"].required = True
+        self.fields["schedules"].help_text = "Solo se aplicará en los bloques seleccionados."
+        self.fields["all_semester"].help_text = "Las fechas se tomarán del semestre académico activo."
         for name, field in self.fields.items():
             if isinstance(field.widget, forms.CheckboxInput):
                 field.widget.attrs["class"] = "form-check-input"
@@ -176,3 +226,36 @@ class ScheduleExceptionForm(forms.ModelForm):
         if self.actor and self.actor.role != UserRoleChoices.ADMIN:
             return self.actor.department
         return department or None
+
+    def clean(self):
+        cleaned_data = super().clean()
+        monitors = cleaned_data.get("monitors")
+        schedules = cleaned_data.get("schedules")
+        if monitors is not None and schedules is not None:
+            selected_monitor_ids = set(monitors.values_list("pk", flat=True))
+            unrelated = [schedule for schedule in schedules if schedule.monitor_id not in selected_monitor_ids]
+            if unrelated:
+                self.add_error("schedules", "Cada bloque debe pertenecer a uno de los usuarios seleccionados.")
+
+        if cleaned_data.get("all_semester"):
+            semester = AcademicSemester.objects.filter(is_active=True).first()
+            if semester is None:
+                self.add_error("all_semester", "No hay un semestre académico activo configurado.")
+            elif not semester.starts_on or not semester.ends_on:
+                self.add_error(
+                    "all_semester",
+                    "El semestre activo debe tener fechas de inicio y finalización configuradas.",
+                )
+            else:
+                cleaned_data["semester"] = semester
+                cleaned_data["start_date"] = semester.starts_on
+                cleaned_data["end_date"] = semester.ends_on
+                self.instance.semester = semester
+        else:
+            cleaned_data["semester"] = None
+            self.instance.semester = None
+            if not cleaned_data.get("start_date"):
+                self.add_error("start_date", "Ingresa la fecha inicial.")
+            if not cleaned_data.get("end_date"):
+                self.add_error("end_date", "Ingresa la fecha final.")
+        return cleaned_data

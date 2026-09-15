@@ -203,22 +203,22 @@ class ScheduleExceptionListView(AdminOrLeaderRequiredMixin, TemplateView):
                 "badge_class": "text-bg-dark",
                 "description": "La excepción está desactivada y no afecta sesiones.",
             }
-        if exception.start_date <= today <= exception.end_date:
+        if exception.effective_start_date <= today <= exception.effective_end_date:
             return {
-                "label": "Vigente",
+                "label": "Activa",
                 "badge_class": "text-bg-success",
                 "description": "La excepción está activa y hoy sí aplica dentro del rango.",
             }
-        if exception.start_date > today:
+        if exception.effective_start_date > today:
             return {
-                "label": "Programada",
+                "label": "Próxima a iniciar",
                 "badge_class": "text-bg-secondary",
                 "description": "La excepción está activa, pero todavía no ha empezado.",
             }
         return {
-            "label": "Activa",
+            "label": "Finalizada",
             "badge_class": "text-bg-primary",
-            "description": "La excepción sigue activa en el sistema, aunque su rango de fechas ya terminó.",
+            "description": "El periodo de vigencia terminó y la excepción ya no se aplica.",
         }
 
     def _selected_exception(self):

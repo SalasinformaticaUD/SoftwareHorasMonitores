@@ -104,18 +104,23 @@ class ScheduleAdmin(admin.ModelAdmin):
 
 @admin.register(ScheduleException)
 class ScheduleExceptionAdmin(admin.ModelAdmin):
-    list_display = ("name", "department", "start_date", "end_date", "ignore_lateness", "is_active")
-    list_filter = ("department", "ignore_lateness", "is_active")
-    search_fields = ("name", "description")
+    list_display = ("name", "department", "start_date", "end_date", "all_semester", "ignore_lateness", "is_active")
+    list_filter = ("department", "all_semester", "ignore_lateness", "is_active")
+    search_fields = ("name", "description", "monitors__full_name")
+    filter_horizontal = ("monitors", "schedules")
 
     def save_model(self, request, obj, form, change):
         obj, updated_sessions = save_schedule_exception(
             actor=request.user,
-            instance=obj if change else None,
+            instance=obj,
             name=form.cleaned_data["name"],
             description=form.cleaned_data["description"],
+            monitors=form.cleaned_data["monitors"],
+            schedules=form.cleaned_data["schedules"],
+            all_semester=form.cleaned_data["all_semester"],
             start_date=form.cleaned_data["start_date"],
             end_date=form.cleaned_data["end_date"],
+            semester=form.cleaned_data.get("semester"),
             department=form.cleaned_data["department"],
             ignore_lateness=form.cleaned_data["ignore_lateness"],
             approve_overtime=form.cleaned_data["approve_overtime"],

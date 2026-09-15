@@ -55,7 +55,10 @@ class Schedule(BaseModel):
                 raise ValidationError("El horario se cruza con otro bloque activo del mismo monitor.")
 
     def __str__(self) -> str:
-        return f"{self.monitor.full_name} - {self.get_weekday_display()}"
+        return (
+            f"{self.monitor.full_name} — {self.get_weekday_display()} "
+            f"{self.start_time.strftime('%H:%M')}–{self.end_time.strftime('%H:%M')}"
+        )
 
 
 class ScheduleException(BaseModel):
@@ -63,6 +66,17 @@ class ScheduleException(BaseModel):
     description = models.TextField(blank=True)
     start_date = models.DateField(db_index=True)
     end_date = models.DateField(db_index=True)
+    all_semester = models.BooleanField(
+        default=False,
+        help_text="Usa automáticamente las fechas del semestre académico asociado.",
+    )
+    semester = models.ForeignKey(
+        "monitors.AcademicSemester",
+        on_delete=models.PROTECT,
+        related_name="schedule_exceptions",
+        null=True,
+        blank=True,
+    )
     department = models.CharField(
         max_length=32,
         choices=DepartmentChoices.choices,
@@ -80,6 +94,16 @@ class ScheduleException(BaseModel):
         help_text="Si esta activo, las horas extra dentro del rango quedan aprobadas automaticamente.",
     )
     is_active = models.BooleanField(default=True, db_index=True)
+    monitors = models.ManyToManyField(
+        "monitors.Monitor",
+        related_name="schedule_exceptions",
+        blank=True,
+    )
+    schedules = models.ManyToManyField(
+        Schedule,
+        related_name="schedule_exceptions",
+        blank=True,
+    )
 
     class Meta:
         ordering = ("-start_date", "name")
@@ -93,9 +117,28 @@ class ScheduleException(BaseModel):
         ]
 
     def clean(self):
-        if self.end_date < self.start_date:
+        if self.start_date and self.end_date and self.end_date < self.start_date:
             raise ValidationError("La fecha final debe ser igual o posterior a la fecha inicial.")
+        if self.all_semester:
+            if not self.semester_id:
+                raise ValidationError("Selecciona un semestre para la vigencia semestral.")
+            if not self.semester.starts_on or not self.semester.ends_on:
+                raise ValidationError("El semestre seleccionado no tiene fechas de inicio y finalización configuradas.")
+            if self.start_date != self.semester.starts_on or self.end_date != self.semester.ends_on:
+                raise ValidationError("La vigencia semestral debe coincidir con las fechas del semestre seleccionado.")
 
     def __str__(self) -> str:
         scope = self.get_department_display() if self.department else "Todas las dependencias"
         return f"{self.name} ({scope})"
+
+    @property
+    def effective_start_date(self):
+        if self.all_semester and self.semester_id and self.semester.starts_on:
+            return self.semester.starts_on
+        return self.start_date
+
+    @property
+    def effective_end_date(self):
+        if self.all_semester and self.semester_id and self.semester.ends_on:
+            return self.semester.ends_on
+        return self.end_date

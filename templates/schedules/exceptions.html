@@ -34,18 +34,50 @@
     flex-wrap: wrap;
   }
 
+  .exception-multi-dropdown .dropdown-toggle {
+    min-height: 2.4rem;
+    text-align: left;
+  }
+
+  .exception-multi-dropdown .dropdown-toggle::after {
+    float: right;
+    margin-top: 0.55rem;
+  }
+
+  .exception-multi-menu {
+    width: 100%;
+    max-height: 19rem;
+    overflow-y: auto;
+  }
+
+  .exception-multi-option {
+    white-space: normal;
+    cursor: pointer;
+  }
+
+  .exception-selected-items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-top: 0.5rem;
+  }
+
+  .exception-selected-item {
+    white-space: normal;
+    text-align: left;
+  }
+
 
   :root {
     --bs-secondary-rgb: 118, 19, 22;
     --text-bg-secondary: 108,117,125;
   }
 </style>
-</style>
 
 <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-2 mb-4">
   <div>
     <h1 class="h3 mb-1">Excepciones de horarios</h1>
-    <p class="text-muted mb-0">Crea periodos especiales en los que los retrasos no se contabilizan, por ejemplo vacaciones, semanas institucionales o permisos generales.</p>
+    <p class="text-muted mb-0">Configura tolerancias para usuarios y bloques específicos durante un periodo definido.</p>
   </div>
   <div class="text-muted small">
     {% if request.user.role == "admin" %}
@@ -59,9 +91,9 @@
 <div class="alert alert-light border mb-4">
   <strong>Estados de las excepciones:</strong>
   <div class="small text-muted mt-2">
-    <div><strong>Vigente:</strong> La excepción está activa y la fecha actual está dentro del rango.</div>
-    <div><strong>Programada:</strong> La excepción está activa, pero su fecha inicial todavía no llega.</div>
-    <div><strong>Activa:</strong> La excepción sigue marcada como activa, aunque su rango de fechas ya terminó.</div>
+    <div><strong>Activa:</strong> La fecha actual está dentro del periodo de vigencia.</div>
+    <div><strong>Próxima a iniciar:</strong> Su fecha inicial todavía no llega.</div>
+    <div><strong>Finalizada:</strong> Su periodo de vigencia ya terminó.</div>
     <div><strong>Inactiva:</strong> La excepción está desactivada y no aplica sobre las sesiones.</div>
   </div>
 </div>
@@ -75,7 +107,7 @@
             <h2 class="h5 mb-1">
               {% if editing_exception %}Editar excepción{% else %}Nueva excepción{% endif %}
             </h2>
-            <p class="text-muted mb-0 small">La excepción se aplicará a las sesiones del rango indicado y recalculará los retardos afectados.</p>
+            <p class="text-muted mb-0 small">Solo aplicará cuando coincidan el usuario, el bloque y una fecha vigente.</p>
           </div>
           {% if editing_exception %}
             <a class="btn btn-outline-secondary btn-sm" href="{% url 'schedule-exceptions' %}">Cancelar</a>
@@ -148,6 +180,7 @@
               <tr>
                 <th>Nombre</th>
                 <th>Dependencia</th>
+                <th>Usuarios y bloques</th>
                 <th>Fechas</th>
                 <th>Estado</th>
                 <th>Configuración</th>
@@ -165,8 +198,24 @@
                   </td>
                   <td>{{ row.scope_label }}</td>
                   <td>
-                    {{ row.item.start_date }}<br>
-                    <span class="text-muted small">hasta {{ row.item.end_date }}</span>
+                    <details>
+                      <summary>{{ row.item.monitors.count }} usuario{{ row.item.monitors.count|pluralize }} · {{ row.item.schedules.count }} bloque{{ row.item.schedules.count|pluralize }}</summary>
+                      <div class="small mt-2">
+                        <strong>Usuarios:</strong>
+                        {% for monitor in row.item.monitors.all %}{{ monitor.full_name }}{% if not forloop.last %}, {% endif %}{% empty %}Alcance general heredado{% endfor %}
+                      </div>
+                      <div class="small mt-1">
+                        <strong>Bloques:</strong>
+                        {% for schedule in row.item.schedules.all %}{{ schedule.monitor.full_name }} — {{ schedule.get_weekday_display }} {{ schedule.start_time|time:"H:i" }}–{{ schedule.end_time|time:"H:i" }}{% if not forloop.last %}<br>{% endif %}{% empty %}Todos los bloques (registro heredado){% endfor %}
+                      </div>
+                    </details>
+                  </td>
+                  <td>
+                    {{ row.item.effective_start_date }}<br>
+                    <span class="text-muted small">hasta {{ row.item.effective_end_date }}</span>
+                    {% if row.item.all_semester %}
+                      <div><span class="badge text-bg-secondary mt-1">Todo el semestre · {{ row.item.semester.name }}</span></div>
+                    {% endif %}
                   </td>
                   <td>
                     <span class="badge {{ row.status.badge_class }} exception-status-badge">{{ row.status.label }}</span>
@@ -176,7 +225,7 @@
                       <span class="badge text-bg-info">No contar retrasos</span>
                     {% endif %}
                     {% if row.item.approve_overtime %}
-                      <span class="badge text-bg-success">Contar horas extra</span>
+                      <span class="badge text-bg-success">Aprueba horas extra automaticamente</span>
                     {% endif %}
                     {% if not row.item.ignore_lateness and not row.item.approve_overtime %}
                       <span class="badge text-bg-warning">Solo informativa</span>
@@ -200,7 +249,7 @@
                 </tr>
               {% empty %}
                 <tr>
-                  <td colspan="6" class="text-center text-muted py-4">Todavía no hay excepciones visibles.</td>
+                  <td colspan="7" class="text-center text-muted py-4">Todavía no hay excepciones visibles.</td>
                 </tr>
               {% endfor %}
             </tbody>
@@ -229,6 +278,174 @@
     var nextButton = document.getElementById("exception-page-next");
     var pageSize = 8;
     var currentPage = 1;
+    var monitorSelect = document.getElementById("id_monitors");
+    var scheduleSelect = document.getElementById("id_schedules");
+    var semesterCheckbox = document.getElementById("id_all_semester");
+    var startDate = document.getElementById("id_start_date");
+    var endDate = document.getElementById("id_end_date");
+
+    function toggleSemesterDates() {
+      if (!semesterCheckbox || !startDate || !endDate) return;
+      var useSemester = semesterCheckbox.checked;
+      startDate.disabled = useSemester;
+      endDate.disabled = useSemester;
+      startDate.required = !useSemester;
+      endDate.required = !useSemester;
+    }
+
+    if (semesterCheckbox) {
+      semesterCheckbox.addEventListener("change", toggleSemesterDates);
+      toggleSemesterDates();
+    }
+
+    function createAccumulatingDropdown(source) {
+      if (!source) return null;
+      source.classList.add("d-none");
+      source.required = false;
+
+      var root = document.createElement("div");
+      root.className = "dropdown exception-multi-dropdown";
+      var button = document.createElement("button");
+      button.className = "btn btn-outline-secondary dropdown-toggle w-100";
+      button.type = "button";
+      button.setAttribute("data-bs-toggle", "dropdown");
+      button.setAttribute("data-bs-auto-close", "outside");
+      button.setAttribute("aria-expanded", "false");
+      var menu = document.createElement("div");
+      menu.className = "dropdown-menu exception-multi-menu p-2";
+      var selectedItems = document.createElement("div");
+      selectedItems.className = "exception-selected-items";
+      root.appendChild(button);
+      root.appendChild(menu);
+      root.appendChild(selectedItems);
+      source.insertAdjacentElement("afterend", root);
+
+      var entries = [];
+      if (source.dataset.selectAll === "true") {
+        var actions = document.createElement("div");
+        actions.className = "d-flex justify-content-between gap-2 border-bottom pb-2 mb-2";
+        var selectAllButton = document.createElement("button");
+        selectAllButton.type = "button";
+        selectAllButton.className = "btn btn-sm btn-link text-decoration-none p-0";
+        selectAllButton.textContent = "Seleccionar todos";
+        var clearButton = document.createElement("button");
+        clearButton.type = "button";
+        clearButton.className = "btn btn-sm btn-link text-secondary text-decoration-none p-0";
+        clearButton.textContent = "Limpiar";
+        actions.appendChild(selectAllButton);
+        actions.appendChild(clearButton);
+        menu.appendChild(actions);
+
+        selectAllButton.addEventListener("click", function (event) {
+          event.stopPropagation();
+          entries.forEach(function (entry) {
+            if (!entry.row.classList.contains("d-none")) {
+              entry.checkbox.checked = true;
+              entry.option.selected = true;
+            }
+          });
+          renderSelection();
+          source.dispatchEvent(new Event("change", {bubbles: true}));
+        });
+
+        clearButton.addEventListener("click", function (event) {
+          event.stopPropagation();
+          entries.forEach(function (entry) {
+            entry.checkbox.checked = false;
+            entry.option.selected = false;
+          });
+          renderSelection();
+          source.dispatchEvent(new Event("change", {bubbles: true}));
+        });
+      }
+
+      entries = Array.from(source.options).map(function (option, index) {
+        var row = document.createElement("label");
+        row.className = "dropdown-item exception-multi-option d-flex gap-2 align-items-start rounded";
+        var checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.className = "form-check-input flex-shrink-0 mt-1";
+        checkbox.checked = option.selected;
+        checkbox.id = source.id + "_choice_" + index;
+        var text = document.createElement("span");
+        text.textContent = option.textContent;
+        row.appendChild(checkbox);
+        row.appendChild(text);
+        menu.appendChild(row);
+        return {option: option, checkbox: checkbox, row: row};
+      });
+
+      function selectedEntries() {
+        return entries.filter(function (entry) { return entry.checkbox.checked && !entry.row.classList.contains("d-none"); });
+      }
+
+      function renderSelection() {
+        var selected = selectedEntries();
+        var placeholder = source.dataset.placeholder || "Seleccionar";
+        button.textContent = selected.length ? selected.length + " seleccionado" + (selected.length === 1 ? "" : "s") : placeholder;
+        selectedItems.replaceChildren();
+        selected.forEach(function (entry) {
+          var chip = document.createElement("button");
+          chip.type = "button";
+          chip.className = "btn btn-sm btn-light border exception-selected-item";
+          chip.textContent = entry.option.textContent + " ×";
+          chip.title = "Quitar de la selección";
+          chip.addEventListener("click", function () {
+            entry.checkbox.checked = false;
+            entry.checkbox.dispatchEvent(new Event("change", {bubbles: true}));
+          });
+          selectedItems.appendChild(chip);
+        });
+      }
+
+      entries.forEach(function (entry) {
+        entry.checkbox.addEventListener("change", function () {
+          entry.option.selected = entry.checkbox.checked;
+          renderSelection();
+          source.dispatchEvent(new Event("change", {bubbles: true}));
+        });
+      });
+
+      function filter(predicate) {
+        var visibleCount = 0;
+        entries.forEach(function (entry) {
+          var visible = predicate(entry.option);
+          entry.row.classList.toggle("d-none", !visible);
+          if (visible) visibleCount += 1;
+          if (!visible && entry.checkbox.checked) {
+            entry.checkbox.checked = false;
+            entry.option.selected = false;
+          }
+        });
+        var oldEmpty = menu.querySelector(".exception-multi-empty");
+        if (oldEmpty) oldEmpty.remove();
+        if (!visibleCount) {
+          var empty = document.createElement("div");
+          empty.className = "exception-multi-empty text-muted small p-2";
+          empty.textContent = source.dataset.empty || "No hay opciones disponibles";
+          menu.appendChild(empty);
+        }
+        renderSelection();
+      }
+
+      renderSelection();
+      return {filter: filter};
+    }
+
+    var monitorDropdown = createAccumulatingDropdown(monitorSelect);
+    var scheduleDropdown = createAccumulatingDropdown(scheduleSelect);
+
+    function filterSchedulesByUsers() {
+      if (!monitorSelect || !scheduleDropdown) return;
+      var monitorIds = new Set(Array.from(monitorSelect.selectedOptions).map(function (option) { return option.value; }));
+      scheduleDropdown.filter(function (option) {
+        return monitorIds.has(option.dataset.monitorId);
+      });
+    }
+
+    if (monitorSelect) monitorSelect.addEventListener("change", filterSchedulesByUsers);
+    if (monitorDropdown) monitorDropdown.filter(function () { return true; });
+    filterSchedulesByUsers();
 
     function renderPage(page) {
       var totalPages = Math.max(Math.ceil(rows.length / pageSize), 1);

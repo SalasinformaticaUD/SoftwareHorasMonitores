@@ -15,4 +15,5 @@ media/
 staticfiles/
 .idea/
 .vscode/
-
+.env.docker
+.pytest/

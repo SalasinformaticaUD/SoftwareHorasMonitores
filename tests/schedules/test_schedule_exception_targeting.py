@@ -2,6 +2,7 @@ from datetime import date, datetime, time
 
 import pytest
 from django.core.exceptions import ValidationError
+from django.urls import reverse
 from django.utils import timezone
 
 from apps.common.choices import DepartmentChoices
@@ -13,6 +14,37 @@ from tests.factories import AdminUserFactory, AttendanceRawRecordFactory, Monito
 
 
 pytestmark = pytest.mark.django_db
+
+
+def test_exception_flow_saves_missing_semester_dates_once(client):
+    leader = UserFactory()
+    monitor = MonitorFactory(department=leader.department)
+    semester = monitor.semester
+    assert semester.starts_on is None
+    client.force_login(leader)
+
+    page = client.get(reverse("schedule-exceptions"))
+    content = page.content.decode()
+    assert 'id="semesterDatesModal"' in content
+    assert "var semesterDatesConfigured = false && false" in content
+    assert "document.body.appendChild(semesterModalElement)" in content
+
+    response = client.post(
+        reverse("schedule-exceptions"),
+        {
+            "action": "configure_semester_dates",
+            "starts_on": "2026-02-02",
+            "ends_on": "2026-06-30",
+        },
+        HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+    )
+
+    assert response.status_code == 200
+    semester.refresh_from_db()
+    assert semester.starts_on == date(2026, 2, 2)
+    assert semester.ends_on == date(2026, 6, 30)
+    content = client.get(reverse("schedule-exceptions")).content.decode()
+    assert "var semesterDatesConfigured = true && true" in content
 
 
 def test_user_selector_scope_allows_admin_all_departments_and_limits_leader():

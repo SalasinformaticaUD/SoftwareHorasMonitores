@@ -1,0 +1,28 @@
+<div class="modal fade semester-dates-modal" id="semesterDatesModal" tabindex="-1" aria-labelledby="semesterDatesModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header">
+        <h2 class="modal-title fs-5" id="semesterDatesModalLabel">Fechas del semestre académico</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small">
+          Este rango quedará guardado en el semestre y se reutilizará en todas las operaciones marcadas como “Todo el semestre”.
+        </p>
+        <div class="alert alert-danger d-none py-2" id="semesterDatesError" role="alert"></div>
+        <div class="mb-3">
+          <label class="form-label" for="semesterDatesStart">Fecha de inicio</label>
+          <input class="form-control" type="date" id="semesterDatesStart">
+        </div>
+        <div>
+          <label class="form-label" for="semesterDatesEnd">Fecha de finalización</label>
+          <input class="form-control" type="date" id="semesterDatesEnd">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="semesterDatesSave">Guardar fechas</button>
+      </div>
+    </div>
+  </div>
+</div>

@@ -164,6 +164,18 @@ def get_current_semester() -> AcademicSemester:
     return AcademicSemester.objects.create(name="2026-1", is_active=True)
 
 
+def configure_semester_dates(*, semester: AcademicSemester, starts_on, ends_on) -> AcademicSemester:
+    """Guarda el rango institucional reutilizado por todas las operaciones semestrales."""
+    if not starts_on or not ends_on:
+        raise ValidationError("Ingresa las fechas de inicio y finalización del semestre.")
+    if ends_on < starts_on:
+        raise ValidationError("La fecha final del semestre debe ser igual o posterior a la fecha inicial.")
+    semester.starts_on = starts_on
+    semester.ends_on = ends_on
+    semester.save(update_fields=["starts_on", "ends_on", "updated_at"])
+    return semester
+
+
 def _user_by_email_or_username(email: str):
     return (
         User.objects.filter(email__iexact=email).first()
@@ -695,7 +707,12 @@ def semester_reset_preview_counts() -> dict[str, int]:
 
 
 @transaction.atomic
-def reset_semester_data(*, new_semester_name: str = "2026-3") -> SemesterResetResult:
+def reset_semester_data(
+    *,
+    new_semester_name: str = "2026-3",
+    new_semester_start=None,
+    new_semester_end=None,
+) -> SemesterResetResult:
     """Archiva el semestre actual y abre uno nuevo sin borrar historicos."""
     from apps.annotations.models import Annotation
     from apps.attendance.models import AttendanceImportJob, AttendanceInconsistency
@@ -708,6 +725,10 @@ def reset_semester_data(*, new_semester_name: str = "2026-3") -> SemesterResetRe
     current_semester = get_current_semester()
     if AcademicSemester.objects.filter(name__iexact=new_semester_name).exclude(pk=current_semester.pk).exists():
         raise ValidationError("Ya existe un semestre con ese nombre.")
+    if bool(new_semester_start) != bool(new_semester_end):
+        raise ValidationError("Ingresa las fechas de inicio y finalización del semestre.")
+    if new_semester_start and new_semester_end and new_semester_end < new_semester_start:
+        raise ValidationError("La fecha final del semestre debe ser igual o posterior a la fecha inicial.")
 
     Schedule.objects.filter(monitor__semester=current_semester).update(is_active=False)
     Monitor.objects.filter(semester=current_semester, is_active=True).update(is_active=False)
@@ -715,7 +736,12 @@ def reset_semester_data(*, new_semester_name: str = "2026-3") -> SemesterResetRe
     current_semester.archived_at = timezone.now()
     current_semester.save(update_fields=["is_active", "archived_at", "updated_at"])
 
-    new_semester = AcademicSemester.objects.create(name=new_semester_name, is_active=True)
+    new_semester = AcademicSemester.objects.create(
+        name=new_semester_name,
+        is_active=True,
+        starts_on=new_semester_start,
+        ends_on=new_semester_end,
+    )
     Notification.objects.all().delete()
 
     return SemesterResetResult(

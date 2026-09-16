@@ -313,7 +313,11 @@ class SemesterResetView(AdminRequiredMixin, TemplateView):
             return self.render_to_response(self.get_context_data(form=form, reset_attempted=True))
 
         try:
-            result = reset_semester_data(new_semester_name=form.cleaned_data["new_semester_name"])
+            result = reset_semester_data(
+                new_semester_name=form.cleaned_data["new_semester_name"],
+                new_semester_start=form.cleaned_data.get("new_semester_start"),
+                new_semester_end=form.cleaned_data.get("new_semester_end"),
+            )
         except ValidationError as exc:
             form.add_error("new_semester_name", "; ".join(exc.messages))
             messages.error(request, "No se pudo iniciar el semestre nuevo.")

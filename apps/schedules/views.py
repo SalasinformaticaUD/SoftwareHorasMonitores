@@ -1,14 +1,17 @@
 from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.db.models import Q
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.utils import timezone
+from django.utils.dateparse import parse_date
 from django.views.generic import TemplateView
 
 from apps.common.choices import UserRoleChoices
 from apps.common.web import AdminOrLeaderRequiredMixin, paginate_collection
 from apps.monitors.models import Monitor
 from apps.monitors.selectors import visible_monitors_for_user
+from apps.monitors.services import configure_semester_dates, get_current_semester
 from apps.schedules.forms import ScheduleBulkUploadForm, ScheduleExceptionForm, ScheduleForm
 from apps.schedules.selectors import visible_schedule_exceptions_for_user
 from apps.schedules.models import Schedule
@@ -243,6 +246,7 @@ class ScheduleExceptionListView(AdminOrLeaderRequiredMixin, TemplateView):
         context["form"] = kwargs.get("form") or self._build_form(instance=editing_exception)
         context["editing_exception"] = editing_exception
         context["today"] = timezone.localdate()
+        context["active_semester"] = get_current_semester()
         exceptions = [
             {
                 "item": exception,
@@ -257,6 +261,25 @@ class ScheduleExceptionListView(AdminOrLeaderRequiredMixin, TemplateView):
 
     def post(self, request, *args, **kwargs):
         action = request.POST.get("action", "save")
+        if action == "configure_semester_dates":
+            starts_on = parse_date(request.POST.get("starts_on", ""))
+            ends_on = parse_date(request.POST.get("ends_on", ""))
+            try:
+                semester = configure_semester_dates(
+                    semester=get_current_semester(),
+                    starts_on=starts_on,
+                    ends_on=ends_on,
+                )
+            except ValidationError as exc:
+                return JsonResponse({"ok": False, "errors": exc.messages}, status=400)
+            return JsonResponse(
+                {
+                    "ok": True,
+                    "semester": semester.name,
+                    "starts_on": semester.starts_on.isoformat(),
+                    "ends_on": semester.ends_on.isoformat(),
+                }
+            )
         if action == "delete":
             exception = get_object_or_404(visible_schedule_exceptions_for_user(request.user), pk=request.POST.get("exception_id"))
             try:

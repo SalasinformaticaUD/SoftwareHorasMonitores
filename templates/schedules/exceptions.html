@@ -268,6 +268,7 @@
     </div>
   </div>
 </div>
+{% include "includes/semester_dates_modal.html" %}
 <script>
   document.addEventListener("DOMContentLoaded", function () {
     var rows = Array.from(document.querySelectorAll("#exceptions-table .exception-row"));
@@ -283,6 +284,17 @@
     var semesterCheckbox = document.getElementById("id_all_semester");
     var startDate = document.getElementById("id_start_date");
     var endDate = document.getElementById("id_end_date");
+    var semesterDatesConfigured = {{ active_semester.starts_on|yesno:"true,false" }} && {{ active_semester.ends_on|yesno:"true,false" }};
+    var semesterModalElement = document.getElementById("semesterDatesModal");
+    if (semesterModalElement && semesterModalElement.parentElement !== document.body) {
+      document.body.appendChild(semesterModalElement);
+    }
+    var semesterModal = semesterModalElement ? bootstrap.Modal.getOrCreateInstance(semesterModalElement) : null;
+    var semesterStartInput = document.getElementById("semesterDatesStart");
+    var semesterEndInput = document.getElementById("semesterDatesEnd");
+    var semesterSaveButton = document.getElementById("semesterDatesSave");
+    var semesterError = document.getElementById("semesterDatesError");
+    var semesterDatesSaved = false;
 
     function toggleSemesterDates() {
       if (!semesterCheckbox || !startDate || !endDate) return;
@@ -291,11 +303,66 @@
       endDate.disabled = useSemester;
       startDate.required = !useSemester;
       endDate.required = !useSemester;
+      if (useSemester && !semesterDatesConfigured && semesterModal) {
+        semesterDatesSaved = false;
+        semesterModal.show();
+      }
     }
 
     if (semesterCheckbox) {
       semesterCheckbox.addEventListener("change", toggleSemesterDates);
       toggleSemesterDates();
+    }
+
+    if (semesterModalElement) {
+      semesterModalElement.addEventListener("hidden.bs.modal", function () {
+        if (!semesterDatesConfigured && !semesterDatesSaved && semesterCheckbox && semesterCheckbox.checked) {
+          semesterCheckbox.checked = false;
+          toggleSemesterDates();
+        }
+      });
+    }
+
+    if (semesterSaveButton) {
+      semesterSaveButton.addEventListener("click", async function () {
+        var startsOn = semesterStartInput.value;
+        var endsOn = semesterEndInput.value;
+        semesterError.classList.add("d-none");
+        if (!startsOn || !endsOn || endsOn < startsOn) {
+          semesterError.textContent = !startsOn || !endsOn
+            ? "Ingresa las fechas de inicio y finalización."
+            : "La fecha final debe ser igual o posterior a la fecha inicial.";
+          semesterError.classList.remove("d-none");
+          return;
+        }
+
+        semesterSaveButton.disabled = true;
+        try {
+          var body = new URLSearchParams({
+            action: "configure_semester_dates",
+            starts_on: startsOn,
+            ends_on: endsOn,
+            csrfmiddlewaretoken: document.querySelector('input[name="csrfmiddlewaretoken"]').value
+          });
+          var response = await fetch(window.location.href, {
+            method: "POST",
+            headers: {"Content-Type": "application/x-www-form-urlencoded", "X-Requested-With": "XMLHttpRequest"},
+            body: body.toString()
+          });
+          var result = await response.json();
+          if (!response.ok || !result.ok) throw new Error((result.errors || ["No fue posible guardar las fechas."]).join(" "));
+          semesterDatesConfigured = true;
+          semesterDatesSaved = true;
+          startDate.value = result.starts_on;
+          endDate.value = result.ends_on;
+          semesterModal.hide();
+        } catch (error) {
+          semesterError.textContent = error.message;
+          semesterError.classList.remove("d-none");
+        } finally {
+          semesterSaveButton.disabled = false;
+        }
+      });
     }
 
     function createAccumulatingDropdown(source) {

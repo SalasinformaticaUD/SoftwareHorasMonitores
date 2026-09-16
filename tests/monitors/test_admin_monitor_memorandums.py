@@ -4,6 +4,7 @@ from django.core import mail
 from django.urls import reverse
 
 from apps.common.choices import DepartmentChoices
+from apps.monitors.models import AcademicSemester
 from apps.reports.models import MonitorMemorandum
 from tests.factories import AdminUserFactory, MonitorFactory, UserFactory
 
@@ -80,6 +81,41 @@ def test_memorandum_module_lists_visible_memorandums(client, tmp_path, settings)
     assert hidden_monitor.full_name not in content
     assert "Abrir PDF" in content
     assert "Reenviar" in content
+
+
+def test_memorandum_module_only_lists_and_resends_current_semester(client, tmp_path, settings):
+    settings.MEDIA_ROOT = tmp_path
+    leader = UserFactory(department=DepartmentChoices.PHYSICS)
+    current_monitor = MonitorFactory(
+        full_name="Monitor Semestre Actual",
+        department=DepartmentChoices.PHYSICS,
+        codigo_estudiante="20261008",
+    )
+    previous_semester = AcademicSemester.objects.create(name="2025-3", is_active=False)
+    historical_monitor = MonitorFactory(
+        full_name="Monitor Semestre Anterior",
+        department=DepartmentChoices.PHYSICS,
+        codigo_estudiante="20251008",
+        semester=previous_semester,
+        is_active=False,
+    )
+    _memorandum_for(current_monitor)
+    historical_memorandum = _memorandum_for(historical_monitor)
+    client.force_login(leader)
+
+    response = client.get(reverse("memorandums-manage"))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert current_monitor.full_name in content
+    assert historical_monitor.full_name not in content
+    assert response.context["stats"]["total"] == 1
+
+    resend_response = client.post(
+        reverse("memorandums-manage"),
+        {"action": "resend_memorandum", "memorandum_id": historical_memorandum.id},
+    )
+    assert resend_response.status_code == 404
 
 
 def test_memorandum_module_resends_to_current_email(client, tmp_path, settings):

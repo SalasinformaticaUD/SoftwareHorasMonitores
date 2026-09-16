@@ -400,11 +400,17 @@ class MemorandumAdminView(AdminOrLeaderRequiredMixin, TemplateView):
     template_name = "reports/memorandums.html"
     paginate_by = 20
 
-    def _base_queryset(self):
+    def _visible_current_queryset(self):
         visible_monitors = visible_monitors_for_user(self.request.user)
-        queryset = MonitorMemorandum.objects.select_related("monitor", "monitor__user").filter(
-            monitor__in=visible_monitors
+        return MonitorMemorandum.objects.select_related(
+            "monitor", "monitor__user", "monitor__semester"
+        ).filter(
+            monitor__in=visible_monitors,
+            monitor__semester__is_active=True,
         )
+
+    def _base_queryset(self):
+        queryset = self._visible_current_queryset()
         query = self.request.GET.get("q", "").strip()
         status = self.request.GET.get("status", "").strip()
         department = self.request.GET.get("department", "").strip()
@@ -430,7 +436,7 @@ class MemorandumAdminView(AdminOrLeaderRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         queryset = self._base_queryset()
-        visible_queryset = MonitorMemorandum.objects.filter(monitor__in=visible_monitors_for_user(self.request.user))
+        visible_queryset = self._visible_current_queryset()
         pagination = paginate_collection(self.request, queryset, per_page=self.paginate_by)
         context.update(
             {
@@ -460,9 +466,7 @@ class MemorandumAdminView(AdminOrLeaderRequiredMixin, TemplateView):
             return redirect("memorandums-manage")
 
         memorandum = get_object_or_404(
-            MonitorMemorandum.objects.select_related("monitor", "monitor__user").filter(
-                monitor__in=visible_monitors_for_user(request.user)
-            ),
+            self._visible_current_queryset(),
             pk=request.POST.get("memorandum_id"),
         )
         try:

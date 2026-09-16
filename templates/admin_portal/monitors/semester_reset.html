@@ -100,8 +100,10 @@
               <h2 class="h5 mb-2">Confirmacion obligatoria</h2>
               <p class="text-muted small">Ingresa el semestre que empieza y confirma con tu contrasena de administrador.</p>
 
-              <form method="post" novalidate>
+              <form method="post" novalidate id="semester-reset-form">
                 {% csrf_token %}
+                {{ form.new_semester_start }}
+                {{ form.new_semester_end }}
                 {% if form.non_field_errors %}
                   <div class="alert alert-danger py-2">{{ form.non_field_errors }}</div>
                 {% endif %}
@@ -132,4 +134,48 @@
     </div>
   </section>
 </div>
+{% include "includes/semester_dates_modal.html" %}
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    var form = document.getElementById("semester-reset-form");
+    var hiddenStart = document.getElementById("id_new_semester_start");
+    var hiddenEnd = document.getElementById("id_new_semester_end");
+    var modalElement = document.getElementById("semesterDatesModal");
+    if (modalElement.parentElement !== document.body) {
+      document.body.appendChild(modalElement);
+    }
+    var modal = bootstrap.Modal.getOrCreateInstance(modalElement);
+    var modalStart = document.getElementById("semesterDatesStart");
+    var modalEnd = document.getElementById("semesterDatesEnd");
+    var saveButton = document.getElementById("semesterDatesSave");
+    var errorBox = document.getElementById("semesterDatesError");
+    var datesConfirmed = Boolean(hiddenStart.value && hiddenEnd.value);
+
+    form.addEventListener("submit", function (event) {
+      if (datesConfirmed) return;
+      event.preventDefault();
+      modalStart.value = hiddenStart.value;
+      modalEnd.value = hiddenEnd.value;
+      modal.show();
+    });
+
+    saveButton.addEventListener("click", function () {
+      var startsOn = modalStart.value;
+      var endsOn = modalEnd.value;
+      errorBox.classList.add("d-none");
+      if (!startsOn || !endsOn || endsOn < startsOn) {
+        errorBox.textContent = !startsOn || !endsOn
+          ? "Ingresa las fechas de inicio y finalización."
+          : "La fecha final debe ser igual o posterior a la fecha inicial.";
+        errorBox.classList.remove("d-none");
+        return;
+      }
+      hiddenStart.value = startsOn;
+      hiddenEnd.value = endsOn;
+      datesConfirmed = true;
+      modal.hide();
+      form.requestSubmit();
+    });
+  });
+</script>
 {% endblock %}

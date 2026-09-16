@@ -120,6 +120,8 @@ class SemesterResetConfirmationForm(forms.Form):
         label="Contrasena del administrador",
         widget=forms.PasswordInput(attrs={"autocomplete": "current-password"}),
     )
+    new_semester_start = forms.DateField(required=False, widget=forms.HiddenInput())
+    new_semester_end = forms.DateField(required=False, widget=forms.HiddenInput())
 
     def __init__(self, *args, admin_user=None, **kwargs):
         self.admin_user = admin_user
@@ -138,6 +140,16 @@ class SemesterResetConfirmationForm(forms.Form):
         if not self.admin_user or not self.admin_user.check_password(password):
             raise forms.ValidationError("La contrasena no coincide con tu cuenta de administrador.")
         return password
+
+    def clean(self):
+        cleaned_data = super().clean()
+        starts_on = cleaned_data.get("new_semester_start")
+        ends_on = cleaned_data.get("new_semester_end")
+        if bool(starts_on) != bool(ends_on):
+            raise forms.ValidationError("Ingresa las fechas de inicio y finalización del semestre.")
+        if starts_on and ends_on and ends_on < starts_on:
+            raise forms.ValidationError("La fecha final debe ser igual o posterior a la fecha inicial.")
+        return cleaned_data
 
 class MonitorActaCompromisoUploadForm(forms.Form):
     source_file = forms.FileField(label="Acta de compromiso (PDF)")

@@ -97,3 +97,28 @@ def test_semester_reset_archives_operational_data_and_preserves_monitor_accounts
     assert ScheduleException.objects.count() == 1
     assert AcademicSemester.objects.get(name="2026-1").is_active is False
     assert AcademicSemester.objects.get(name="2026-3").is_active is True
+
+
+def test_semester_reset_modal_dates_are_saved_on_new_semester(client):
+    admin = AdminUserFactory(username="admin-semester-dates")
+    MonitorFactory()
+    client.force_login(admin)
+
+    page = client.get(reverse("admin-semester-reset"))
+    assert 'id="semesterDatesModal"' in page.content.decode()
+    assert "document.body.appendChild(modalElement)" in page.content.decode()
+
+    response = client.post(
+        reverse("admin-semester-reset"),
+        {
+            "new_semester_name": "2026-4",
+            "new_semester_start": "2026-08-03",
+            "new_semester_end": "2026-12-12",
+            "password": "ChangeMe123!",
+        },
+    )
+
+    assert response.status_code == 302
+    semester = AcademicSemester.objects.get(name="2026-4")
+    assert semester.starts_on.isoformat() == "2026-08-03"
+    assert semester.ends_on.isoformat() == "2026-12-12"

@@ -35,3 +35,28 @@ class CommitmentActStatusSerializer(serializers.Serializer):
     has_signed = serializers.BooleanField()
     signed_file_name = serializers.CharField()
     uploaded_at = serializers.DateTimeField(allow_null=True)
+    submission_id = serializers.UUIDField(source="submission.id", allow_null=True)
+    status = serializers.CharField()
+    rejection_reason = serializers.CharField()
+    reviewed_at = serializers.DateTimeField(source="submission.reviewed_at", allow_null=True)
+
+
+class CommitmentActUploadSerializer(serializers.Serializer):
+    signed_file = serializers.FileField()
+
+    def validate_signed_file(self, value):
+        if not value.name.lower().endswith(".pdf"):
+            raise serializers.ValidationError("El acta firmada debe ser un archivo PDF.")
+        if value.size > 10 * 1024 * 1024:
+            raise serializers.ValidationError("El archivo PDF no puede superar 10 MB.")
+        return value
+
+
+class CommitmentActReviewSerializer(serializers.Serializer):
+    action = serializers.ChoiceField(choices=("accept", "reject"))
+    rejection_reason = serializers.CharField(required=False, allow_blank=True, max_length=2000)
+
+    def validate(self, attrs):
+        if attrs["action"] == "reject" and not attrs.get("rejection_reason", "").strip():
+            attrs["rejection_reason"] = "Acta rechazada para corrección y nuevo envío."
+        return attrs

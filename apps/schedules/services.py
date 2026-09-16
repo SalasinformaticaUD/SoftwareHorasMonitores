@@ -13,7 +13,6 @@ from apps.common.utils import normalize_text
 from apps.monitors.models import Monitor, PROJECT_CHOICES
 from apps.monitors.selectors import visible_monitors_for_user
 from apps.schedules.models import Schedule, ScheduleException
-from apps.work_sessions.services import sync_sessions_for_exception_change
 
 
 DAY_NAME_TO_WEEKDAY = {
@@ -477,8 +476,12 @@ def save_schedule_exception(
     instance: Optional[ScheduleException] = None,
     name: str,
     description: str,
+    monitors,
+    schedules,
+    all_semester: bool,
     start_date,
     end_date,
+    semester=None,
     department,
     ignore_lateness: bool,
     approve_overtime: bool,
@@ -486,17 +489,29 @@ def save_schedule_exception(
 ):
     _validate_exception_scope(actor=actor, department=department)
     exception = instance or ScheduleException()
-    previous_state = None
-    if instance is not None and instance.pk:
-        previous = ScheduleException.objects.get(pk=instance.pk)
-        previous_state = {
-            "start_date": previous.start_date,
-            "end_date": previous.end_date,
-            "department": previous.department,
-        }
+    monitor_list = list(monitors)
+    monitor_ids = {monitor.pk for monitor in monitor_list}
+    schedule_list = list(schedules)
+    if not monitor_ids:
+        raise ValidationError("Selecciona al menos un usuario.")
+    if not schedule_list:
+        raise ValidationError("Selecciona al menos un bloque horario.")
+    if any(schedule.monitor_id not in monitor_ids for schedule in schedule_list):
+        raise ValidationError("Cada bloque debe pertenecer a uno de los usuarios seleccionados.")
+    if actor.role != UserRoleChoices.ADMIN and any(monitor.department != actor.department for monitor in monitor_list):
+        raise ValidationError("Solo puedes incluir usuarios de tu propia dependencia.")
+    if all_semester:
+        if semester is None or not semester.is_active:
+            raise ValidationError("La excepción semestral debe usar el semestre académico activo.")
+        if not semester.starts_on or not semester.ends_on:
+            raise ValidationError("El semestre activo no tiene fechas de inicio y finalización configuradas.")
+        start_date = semester.starts_on
+        end_date = semester.ends_on
 
     exception.name = name
     exception.description = description
+    exception.all_semester = all_semester
+    exception.semester = semester if all_semester else None
     exception.start_date = start_date
     exception.end_date = end_date
     exception.department = department
@@ -505,29 +520,15 @@ def save_schedule_exception(
     exception.is_active = is_active
     exception.full_clean()
     exception.save()
-
-    updated_sessions = sync_sessions_for_exception_change(
-        current_exception=exception,
-        previous_start_date=previous_state["start_date"] if previous_state else None,
-        previous_end_date=previous_state["end_date"] if previous_state else None,
-        previous_department=previous_state["department"] if previous_state else None,
-    )
-    return exception, updated_sessions
+    exception.monitors.set(monitor_list)
+    exception.schedules.set(schedule_list)
+    return exception, 0
 
 
 def delete_schedule_exception(*, actor, exception: ScheduleException) -> int:
     _validate_exception_scope(actor=actor, department=exception.department)
-    previous_state = {
-        "start_date": exception.start_date,
-        "end_date": exception.end_date,
-        "department": exception.department,
-    }
     exception.delete()
-    return sync_sessions_for_exception_change(
-        previous_start_date=previous_state["start_date"],
-        previous_end_date=previous_state["end_date"],
-        previous_department=previous_state["department"],
-    )
+    return 0
 
 
 def import_schedules_from_workbook(*, uploaded_file, actor=None) -> ScheduleImportResult:

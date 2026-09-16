@@ -47,7 +47,7 @@ def _resolve_lateness(*, monitor, work_day, schedule, normalized_start):
     """
     late = 0
     lateness_excused = False
-    lateness_exception = lateness_exception_for(monitor=monitor, day=work_day)
+    lateness_exception = lateness_exception_for(monitor=monitor, day=work_day, schedule=schedule)
 
     if schedule:
         if lateness_exception is not None:
@@ -58,7 +58,7 @@ def _resolve_lateness(*, monitor, work_day, schedule, normalized_start):
     return late, lateness_excused, lateness_exception
 
 
-def _resolve_overtime_exception(*, monitor, work_day, overtime_minutes):
+def _resolve_overtime_exception(*, monitor, work_day, overtime_minutes, schedule=None):
     """Determina el estado inicial de horas extra segun excepciones activas.
 
     Args:
@@ -73,7 +73,7 @@ def _resolve_overtime_exception(*, monitor, work_day, overtime_minutes):
     if overtime_minutes <= 0:
         return OvertimeStatusChoices.NOT_APPLICABLE, False, None
 
-    overtime_exception = overtime_exception_for(monitor=monitor, day=work_day)
+    overtime_exception = overtime_exception_for(monitor=monitor, day=work_day, schedule=schedule)
     if overtime_exception is not None:
         return OvertimeStatusChoices.APPROVED, True, overtime_exception
 
@@ -134,6 +134,7 @@ def sync_session_overtime_exception(*, session: WorkSession) -> WorkSession:
         monitor=session.monitor,
         work_day=session.work_day,
         overtime_minutes=session.overtime_minutes,
+        schedule=session.schedule,
     )
 
     if session.overtime_minutes <= 0:
@@ -300,6 +301,7 @@ def process_raw_record_to_session(*, raw_record):
         monitor=raw_record.monitor,
         work_day=raw_record.work_day,
         overtime_minutes=overtime,
+        schedule=schedule,
     )
 
     session = WorkSession.objects.create(

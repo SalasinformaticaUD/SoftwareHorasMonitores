@@ -43,28 +43,35 @@ def schedules_overlapping_session(*, monitor, day: date, start_time, end_time) -
     ]
 
 
-def _active_exception_queryset(*, monitor, day: date):
-    base_queryset = ScheduleException.objects.filter(
-        is_active=True,
-        start_date__lte=day,
-        end_date__gte=day,
-    )
+def _active_exception_queryset(*, monitor, day: date, schedule=None):
+    base_queryset = ScheduleException.objects.filter(is_active=True).filter(
+        Q(all_semester=False, start_date__lte=day, end_date__gte=day)
+        | Q(all_semester=True, semester__starts_on__lte=day, semester__ends_on__gte=day)
+    ).filter(Q(monitors=monitor) | Q(monitors__isnull=True))
+    if schedule is not None:
+        base_queryset = base_queryset.filter(Q(schedules=schedule) | Q(schedules__isnull=True))
+    else:
+        base_queryset = base_queryset.filter(schedules__isnull=True)
+    base_queryset = base_queryset.distinct()
+    targeted_queryset = base_queryset.exclude(monitors__isnull=True).exclude(schedules__isnull=True)
+    if targeted_queryset.exists():
+        base_queryset = targeted_queryset
     department_specific = base_queryset.filter(department=monitor.department).order_by("-start_date", "name")
     if department_specific.exists():
         return department_specific
     return base_queryset.filter(Q(department__isnull=True) | Q(department="")).order_by("-start_date", "name")
 
 
-def lateness_exception_for(*, monitor, day: date) -> Optional[ScheduleException]:
-    return _active_exception_queryset(monitor=monitor, day=day).filter(ignore_lateness=True).first()
+def lateness_exception_for(*, monitor, day: date, schedule=None) -> Optional[ScheduleException]:
+    return _active_exception_queryset(monitor=monitor, day=day, schedule=schedule).filter(ignore_lateness=True).first()
 
 
-def overtime_exception_for(*, monitor, day: date) -> Optional[ScheduleException]:
-    return _active_exception_queryset(monitor=monitor, day=day).filter(approve_overtime=True).first()
+def overtime_exception_for(*, monitor, day: date, schedule=None) -> Optional[ScheduleException]:
+    return _active_exception_queryset(monitor=monitor, day=day, schedule=schedule).filter(approve_overtime=True).first()
 
 
 def visible_schedule_exceptions_for_user(user):
-    queryset = ScheduleException.objects.order_by("-start_date", "name")
+    queryset = ScheduleException.objects.prefetch_related("monitors", "schedules__monitor").select_related("semester").order_by("-start_date", "name")
     if user.role == UserRoleChoices.ADMIN:
         return queryset
     return queryset.filter(Q(department=user.department) | Q(department__isnull=True) | Q(department=""))

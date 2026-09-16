@@ -1,24 +1,40 @@
 from io import BytesIO
+from pathlib import Path
 
+from django.conf import settings
 from django.http import FileResponse
-from rest_framework import decorators, response, status, views, viewsets
-from rest_framework.exceptions import ValidationError
+from django.shortcuts import get_object_or_404
+from django.utils import timezone
+from rest_framework import decorators, permissions, response, status, views, viewsets
+from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 
 from apps.common.permissions import IsAdminOrLeader
-from apps.common.choices import UserRoleChoices
+from apps.common.choices import CommitmentActStatusChoices, UserRoleChoices
 from apps.common.throttling import PublicMonitorLookupThrottle
-from apps.reports.api.serializers import GenerateReportSerializer, MonitorReportSnapshotSerializer
-from apps.reports.models import MonitorReportSnapshot
-from apps.reports.selectors import build_dashboard_context, public_monitor_lookup
-from apps.reports.services import generate_monitor_report
-from apps.reports.models import MonitorMemorandum
-from apps.reports.api.extended_serializers import CommitmentActStatusSerializer, MonitorMemorandumSerializer
-from apps.monitors.selectors import visible_monitors_for_user
 from apps.monitors.models import AcademicSemester
+from apps.monitors.selectors import visible_monitors_for_user
 from apps.monitors.services import get_current_semester
+from apps.reports.api.extended_serializers import (
+    CommitmentActReviewSerializer,
+    CommitmentActStatusSerializer,
+    CommitmentActUploadSerializer,
+    MonitorMemorandumSerializer,
+)
+from apps.reports.api.serializers import GenerateReportSerializer, MonitorReportSnapshotSerializer
 from apps.reports.pdf import build_monitor_commitment_act_pdf
-from apps.reports.services import build_commitment_act_status_rows, send_lateness_memorandum
-from apps.reports.selectors import build_historical_monitor_rows_for_user
+from apps.reports.models import CommitmentActSubmission, MonitorMemorandum, MonitorReportSnapshot
+from apps.reports.selectors import (
+    build_dashboard_context,
+    build_historical_monitor_rows_for_user,
+    public_monitor_lookup,
+)
+from apps.reports.services import (
+    build_commitment_act_status_rows,
+    commitment_act_status_for_monitor,
+    generate_monitor_report,
+    send_lateness_memorandum,
+    signed_commitment_act_for_monitor,
+)
 
 
 class LeaderDashboardAPIView(views.APIView):
@@ -175,7 +191,104 @@ class CommitmentActListAPIView(views.APIView):
 
     def get(self, request):
         rows = build_commitment_act_status_rows(visible_monitors_for_user(request.user))
-        return response.Response(CommitmentActStatusSerializer(rows, many=True).data)
+        return response.Response(
+            CommitmentActStatusSerializer(rows, many=True, context={"request": request}).data
+        )
+
+
+class MyCommitmentActAPIView(views.APIView):
+    """Consulta y recibe el acta firmada del monitor autenticado."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    @staticmethod
+    def _monitor_for(request):
+        monitor = request.user.monitor_profile
+        if monitor is None:
+            raise NotFound("El usuario autenticado no tiene un perfil de monitor asociado.")
+        return monitor
+
+    def get(self, request):
+        row = commitment_act_status_for_monitor(self._monitor_for(request))
+        return response.Response(
+            CommitmentActStatusSerializer(row, context={"request": request}).data
+        )
+
+    def post(self, request):
+        serializer = CommitmentActUploadSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        monitor = self._monitor_for(request)
+        CommitmentActSubmission.objects.create(
+            monitor=monitor,
+            signed_file=serializer.validated_data["signed_file"],
+        )
+        row = commitment_act_status_for_monitor(monitor)
+        return response.Response(
+            CommitmentActStatusSerializer(row, context={"request": request}).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class CommitmentActReviewAPIView(views.APIView):
+    """Acepta o rechaza el envío más reciente de un monitor visible."""
+
+    permission_classes = [IsAdminOrLeader]
+
+    def post(self, request, monitor_id):
+        monitor = get_object_or_404(
+            visible_monitors_for_user(request.user).filter(is_active=True),
+            pk=monitor_id,
+        )
+        submission = monitor.commitment_act_submissions.first()
+        if submission is None:
+            signed_file = signed_commitment_act_for_monitor(monitor)
+            if signed_file is None:
+                raise ValidationError("Este monitor no tiene un envío de acta revisable.")
+            submission = CommitmentActSubmission(monitor=monitor)
+            submission.signed_file.name = str(
+                signed_file.relative_to(settings.MEDIA_ROOT)
+            ).replace("\\", "/")
+
+        serializer = CommitmentActReviewSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        action = serializer.validated_data["action"]
+        if action == "accept":
+            submission.status = CommitmentActStatusChoices.ACCEPTED
+            submission.rejection_reason = ""
+        else:
+            submission.status = CommitmentActStatusChoices.REJECTED
+            submission.rejection_reason = serializer.validated_data["rejection_reason"]
+        submission.reviewed_by = request.user
+        submission.reviewed_at = timezone.now()
+        submission.save()
+
+        row = commitment_act_status_for_monitor(monitor)
+        return response.Response(
+            CommitmentActStatusSerializer(row, context={"request": request}).data
+        )
+
+
+class CommitmentActSignedPdfAPIView(views.APIView):
+    """Descarga el acta firmada, respetando el alcance del usuario autenticado."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, monitor_id):
+        if request.user.role in {UserRoleChoices.ADMIN, UserRoleChoices.LEADER}:
+            monitor = get_object_or_404(visible_monitors_for_user(request.user), pk=monitor_id)
+        else:
+            monitor = request.user.monitor_profile
+            if monitor is None or monitor.pk != monitor_id:
+                raise PermissionDenied("No puedes descargar el acta de otro monitor.")
+        signed_file = commitment_act_status_for_monitor(monitor).signed_file
+        if signed_file is None or not Path(signed_file).is_file():
+            raise NotFound("El monitor no tiene un acta firmada disponible.")
+        return FileResponse(
+            Path(signed_file).open("rb"),
+            content_type="application/pdf",
+            as_attachment=True,
+            filename=Path(signed_file).name,
+        )
 
 
 class CommitmentActPdfAPIView(views.APIView):

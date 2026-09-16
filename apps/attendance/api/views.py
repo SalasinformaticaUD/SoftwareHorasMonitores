@@ -10,6 +10,7 @@ from apps.attendance.models import AttendanceImportJob
 from apps.attendance.selectors import pending_reconciliation_records_for_user, visible_import_jobs_for_user
 from apps.attendance.services import assign_monitor_manually, create_import_job
 from apps.attendance.tasks import process_import_job
+from apps.common.choices import UserRoleChoices
 from apps.common.permissions import IsAdminOrLeader
 from apps.monitors.selectors import visible_monitors_for_user
 
@@ -43,6 +44,10 @@ class PendingReconciliationViewSet(viewsets.ReadOnlyModelViewSet):
 
     @decorators.action(detail=True, methods=["post"], url_path="assign-monitor")
     def assign_monitor(self, request, pk=None):
+        if request.user.role != UserRoleChoices.ADMIN:
+            raise exceptions.PermissionDenied(
+                "Solo un administrador puede vincular manualmente un registro de asistencia."
+            )
         raw_record = self.get_object()
         serializer = ManualAssignmentSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)

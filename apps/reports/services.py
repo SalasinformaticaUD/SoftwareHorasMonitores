@@ -42,11 +42,11 @@ from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-from apps.common.choices import DepartmentChoices, SessionStateChoices
+from apps.common.choices import CommitmentActStatusChoices, DepartmentChoices, SessionStateChoices
 from apps.common.events import DomainEvent, event_bus
 from apps.common.utils import normalize_text
 from apps.reports.events import REPORT_GENERATED
-from apps.reports.models import MonitorMemorandum, MonitorReportSnapshot
+from apps.reports.models import CommitmentActSubmission, MonitorMemorandum, MonitorReportSnapshot
 from apps.reports.selectors import (
     aggregate_monitor_metrics,
     build_historical_monitor_rows_for_user,
@@ -116,6 +116,9 @@ class CommitmentActStatus:
     signed_file: Path | None
     signed_file_name: str
     uploaded_at: datetime | None
+    submission: CommitmentActSubmission | None = None
+    status: str = "pending"
+    rejection_reason: str = ""
 
     @property
     def has_signed(self) -> bool:
@@ -126,6 +129,18 @@ class CommitmentActStatus:
         """
 
         return self.signed_file is not None
+
+    @property
+    def is_pending(self):
+        return self.status == CommitmentActStatusChoices.PENDING
+
+    @property
+    def is_accepted(self):
+        return self.status == CommitmentActStatusChoices.ACCEPTED
+
+    @property
+    def is_rejected(self):
+        return self.status == CommitmentActStatusChoices.REJECTED
 
 
 def get_dashboard_export_directory() -> Path:
@@ -188,7 +203,16 @@ def commitment_act_status_for_monitor(monitor) -> CommitmentActStatus:
         CommitmentActStatus: Datos de estado y archivo firmado detectado.
     """
 
-    signed_file = signed_commitment_act_for_monitor(monitor)
+    submission = monitor.commitment_act_submissions.select_related("reviewed_by").first()
+    signed_file = None
+    status = CommitmentActStatusChoices.PENDING
+    rejection_reason = ""
+    if submission:
+        signed_file = Path(submission.signed_file.path) if submission.signed_file else None
+        status = submission.status
+        rejection_reason = submission.rejection_reason
+    else:
+        signed_file = signed_commitment_act_for_monitor(monitor)
     uploaded_at = None
     if signed_file:
         uploaded_at = timezone.localtime(datetime.fromtimestamp(signed_file.stat().st_mtime, tz=timezone.get_current_timezone()))
@@ -197,6 +221,9 @@ def commitment_act_status_for_monitor(monitor) -> CommitmentActStatus:
         signed_file=signed_file,
         signed_file_name=signed_file.name if signed_file else "",
         uploaded_at=uploaded_at,
+        submission=submission,
+        status=status,
+        rejection_reason=rejection_reason,
     )
 
 

@@ -41,11 +41,27 @@ class ScheduleExceptionViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return visible_schedule_exceptions_for_user(self.request.user)
 
+    @staticmethod
+    def _service_data(serializer):
+        data = dict(serializer.validated_data)
+        instance = serializer.instance
+        for field in (
+            "name", "description", "start_date", "end_date", "department",
+            "ignore_lateness", "approve_overtime", "is_active", "all_semester", "semester",
+        ):
+            if field not in data and instance is not None:
+                data[field] = getattr(instance, field)
+        if "monitors" not in data and instance is not None:
+            data["monitors"] = instance.monitors.all()
+        if "schedules" not in data and instance is not None:
+            data["schedules"] = instance.schedules.all()
+        return data
+
     def perform_create(self, serializer):
         try:
             serializer.instance, _ = save_schedule_exception(
                 actor=self.request.user,
-                **serializer.validated_data,
+                **self._service_data(serializer),
             )
         except DjangoValidationError as exc:
             raise ValidationError(exc.messages)
@@ -55,7 +71,7 @@ class ScheduleExceptionViewSet(viewsets.ModelViewSet):
             serializer.instance, _ = save_schedule_exception(
                 actor=self.request.user,
                 instance=serializer.instance,
-                **serializer.validated_data,
+                **self._service_data(serializer),
             )
         except DjangoValidationError as exc:
             raise ValidationError(exc.messages)

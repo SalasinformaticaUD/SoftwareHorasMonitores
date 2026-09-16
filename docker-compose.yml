@@ -3,7 +3,7 @@ x-app-common: &app-common
     context: .
   image: adminsalas/monitores-app:latest
   env_file:
-    - .env
+    - ${MONITORES_ENV_FILE:-.env}
   restart: unless-stopped
   init: true
   volumes:

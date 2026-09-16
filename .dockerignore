@@ -6,6 +6,7 @@
 .idea
 .mypy_cache
 .pytest_cache
+.pytest_temp
 .ruff_cache
 .tmp
 .venv

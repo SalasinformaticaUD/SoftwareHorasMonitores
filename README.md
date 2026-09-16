@@ -81,6 +81,22 @@ Gestión de Aulas están disponibles estas rutas sin prefijo:
 4. Carga datos semilla con `docker compose exec web python manage.py seed_initial_data`.
 5. Abre `http://localhost:8000`.
 
+### Docker junto con Plataforma/Aulas
+
+Para ejecutar Monitores junto con los contenedores de Aulas:
+
+1. Copia `.env.docker.example` como `.env.docker` y reemplaza todos los valores `CHANGE_ME`.
+2. Configura `PLATFORM_JWT_SECRET` con el mismo valor de `JWT_SECRET` de Aulas.
+3. Configura el mismo `MONITORES_SERVICE_TOKEN` en ambos proyectos.
+4. En el `.env` de Aulas define `MONITORES_DOCKER_API_URL=http://monitores-api:8000`.
+5. Levanta primero Aulas para crear la red `aulas_internal` y después Monitores:
+
+```powershell
+docker compose --env-file .env.docker -f docker-compose.yml -f docker-compose.platform.yml up --build
+```
+
+La API queda disponible en `http://localhost:8002`. Dentro de Docker, Monitores consume Aulas mediante `http://backend:3000` y Aulas consume Monitores mediante `http://monitores-api:8000`.
+
 ## Desarrollo local sin Docker
 
 1. Crea y activa un entorno virtual con Python 3.12 o superior.

@@ -1,0 +1,19 @@
+# Une el contenedor de Monitores a la red creada por el compose de Aulas.
+# Levantar después de que exista la red externa aulas_internal.
+services:
+  app:
+    networks:
+      default: {}
+      aulas-internal:
+        aliases:
+          - monitores-api
+  db:
+    networks:
+      default:
+        aliases:
+          - monitores-db
+
+networks:
+  aulas-internal:
+    external: true
+    name: ${AULAS_NETWORK_NAME:-aulas_internal}

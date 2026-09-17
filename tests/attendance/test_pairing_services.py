@@ -6,6 +6,7 @@ from django.utils import timezone
 
 from apps.attendance.models import AttendanceInconsistency, AttendanceRawRecord
 from apps.attendance.services import (
+    annotate_attendance_inconsistency,
     invalidate_inconsistent_raw_record,
     link_annotation_to_inconsistency,
     pair_raw_attendance_events,
@@ -207,6 +208,29 @@ def test_unpaired_inconsistent_raw_record_requires_solution_annotation_before_in
     assert unpaired.reconciliation_status == ReconciliationStatusChoices.REJECTED
     assert inconsistency.status == AttendanceInconsistencyStatusChoices.RESOLVED
     assert inconsistency.solution_annotation == annotation
+
+
+@pytest.mark.django_db
+def test_creating_solution_annotation_links_it_to_inconsistency():
+    leader = UserFactory()
+    import_job = AttendanceImportJobFactory(uploaded_by=leader)
+    monitor = MonitorFactory(full_name="Ana Torres", department=leader.department)
+    unpaired = raw_event(import_job=import_job, monitor=monitor, event_at=datetime(2026, 4, 13, 8, 0), row_number=2)
+    pair_raw_attendance_events(work_day=date(2026, 4, 13), monitor=monitor)
+    inconsistency = AttendanceInconsistency.objects.get(raw_record=unpaired)
+
+    annotation = annotate_attendance_inconsistency(
+        inconsistency=inconsistency,
+        actor=leader,
+        annotation_type=AnnotationTypeChoices.MISSING_PUNCH,
+        action=AnnotationActionChoices.NOTE,
+        delta_minutes=0,
+        description="Se registró la corrección.",
+    )
+
+    inconsistency.refresh_from_db()
+    assert inconsistency.solution_annotation == annotation
+    assert inconsistency.status == AttendanceInconsistencyStatusChoices.RESOLVED
 
 
 @pytest.mark.django_db

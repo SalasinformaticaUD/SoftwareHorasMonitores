@@ -5,11 +5,14 @@ from apps.annotations.services import create_annotation, update_annotation
 
 
 class AnnotationSerializer(serializers.ModelSerializer):
+    leader_name = serializers.CharField(source="leader.get_full_name", read_only=True)
+
     class Meta:
         model = Annotation
         fields = (
             "id",
             "leader",
+            "leader_name",
             "monitor",
             "session",
             "department",

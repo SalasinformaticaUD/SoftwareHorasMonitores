@@ -106,6 +106,23 @@ def test_annotation_rejects_more_than_24_hours_even_outside_form():
 
 
 @pytest.mark.django_db
+def test_annotation_rejects_zero_hour_adjustment_even_outside_form():
+    leader = UserFactory()
+    monitor = MonitorFactory(department=leader.department)
+
+    with pytest.raises(ValidationError, match="al menos 0.01 horas"):
+        create_annotation(
+            leader=leader,
+            monitor=monitor,
+            annotation_type="virtual_hours",
+            description="Ajuste nulo.",
+            action="add",
+            delta_minutes=0,
+            occurred_on="2026-04-13",
+        )
+
+
+@pytest.mark.django_db
 def test_annotation_rejects_historical_monitor_even_outside_form():
     leader = UserFactory()
     old_semester = AcademicSemester.objects.create(name="2025-3", is_active=False)

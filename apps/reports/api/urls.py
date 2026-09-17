@@ -25,6 +25,7 @@ urlpatterns = [
     path("public-monitor-lookup/", PublicMonitorLookupAPIView.as_view(), name="report-public-lookup"),
     path("commitment-acts/", CommitmentActListAPIView.as_view(), name="report-commitment-acts"),
     path("commitment-acts/me/", MyCommitmentActAPIView.as_view(), name="report-my-commitment-act"),
+    path("commitment-acts/me/pdf/", CommitmentActPdfAPIView.as_view(), name="report-my-commitment-act-pdf"),
     path("commitment-acts/<uuid:monitor_id>/pdf/", CommitmentActPdfAPIView.as_view(), name="report-commitment-act-pdf"),
     path("commitment-acts/<uuid:monitor_id>/signed-pdf/", CommitmentActSignedPdfAPIView.as_view(), name="report-commitment-act-signed-pdf"),
     path("commitment-acts/<uuid:monitor_id>/review/", CommitmentActReviewAPIView.as_view(), name="report-commitment-act-review"),

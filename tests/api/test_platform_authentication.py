@@ -8,10 +8,10 @@ import uuid
 import pytest
 from django.test import override_settings
 
-from tests.factories import UserFactory
+from tests.factories import AdminUserFactory, UserFactory
 
 
-def _token(*, secret, subject, expires_in=300):
+def _token(*, secret, subject, username="leader.physics", expires_in=300):
     def encode(value):
         return base64.urlsafe_b64encode(json.dumps(value, separators=(",", ":")).encode()).rstrip(b"=").decode()
 
@@ -19,7 +19,7 @@ def _token(*, secret, subject, expires_in=300):
     payload = encode(
         {
             "sub": str(subject),
-            "nombreUsuario": "leader.physics",
+            "nombreUsuario": username,
             "roles": ["LIDER"],
             "permisos": ["MONITORES_LEER"],
             "iat": int(time.time()),
@@ -54,6 +54,25 @@ def test_platform_jwt_rejects_an_unlinked_user(api_client):
     response = api_client.get("/api/v1/platform/me/")
 
     assert response.status_code == 401
+
+
+@pytest.mark.django_db
+@override_settings(PLATFORM_JWT_SECRET="platform-test-secret")
+def test_platform_syncs_only_the_exact_admin_identity(api_client):
+    admin = AdminUserFactory(username="admin", usuario_externo_id=uuid.uuid4())
+    central_id = uuid.uuid4()
+    api_client.credentials(
+        HTTP_AUTHORIZATION=(
+            f"Bearer {_token(secret='platform-test-secret', subject=central_id, username='admin')}"
+        )
+    )
+
+    response = api_client.post("/api/v1/platform/sync-admin-identity/")
+
+    assert response.status_code == 200
+    admin.refresh_from_db()
+    assert admin.usuario_externo_id == central_id
+    assert api_client.get("/api/v1/platform/me/").status_code == 200
 
 
 @pytest.mark.django_db

@@ -52,6 +52,9 @@ def test_general_frontend_can_provision_monitor_with_platform_identity(api_clien
         "email": "monitor.plataforma@udistrital.edu.co",
         "username": "monitor.plataforma",
         "department": "physics",
+        "numero_documento": "10101010",
+        "proyecto_curricular": "ingenieria_sistemas",
+        "telefono": "3001234567",
     }
 
     response = api_client.post("/api/v1/monitors/provision/", payload, format="json")
@@ -78,9 +81,33 @@ def test_provision_endpoint_is_idempotent_for_platform_identity(api_client, monk
             "codigo_estudiante": "20269999",
             "email": "duplicado@udistrital.edu.co",
             "department": "physics",
+            "numero_documento": "10101011",
+            "proyecto_curricular": "ingenieria_sistemas",
+            "telefono": "3001234568",
         },
         format="json",
     )
 
     assert response.status_code == 201
     assert response.data["id"] == str(existing.id)
+
+
+@pytest.mark.django_db
+def test_provision_requires_document_phone_and_curricular_project(api_client, monkeypatch):
+    admin = AdminUserFactory()
+    api_client.force_authenticate(user=admin)
+    monkeypatch.setattr("apps.monitors.api.views.provision_platform_user", lambda **_kwargs: uuid.uuid4())
+
+    response = api_client.post(
+        "/api/v1/monitors/provision/",
+        {
+            "full_name": "Monitor Incompleto",
+            "codigo_estudiante": "20260002",
+            "email": "incompleto@udistrital.edu.co",
+            "department": "physics",
+        },
+        format="json",
+    )
+
+    assert response.status_code == 400
+    assert {"numero_documento", "proyecto_curricular", "telefono"} <= set(response.data)

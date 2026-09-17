@@ -1,6 +1,8 @@
+import re
 from pathlib import Path
 
 import environ
+from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
@@ -56,6 +58,15 @@ DATABASES = {
         default="postgres://postgres:postgres@localhost:5432/monitores",
     ),
 }
+database_options = DATABASES["default"].setdefault("OPTIONS", {})
+database_schema = database_options.pop("schema", "").strip()
+if database_schema:
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", database_schema):
+        raise ImproperlyConfigured("El schema configurado en DATABASE_URL no es válido.")
+    existing_connection_options = database_options.get("options", "").strip()
+    database_options["options"] = (
+        f"{existing_connection_options} -c search_path={database_schema}"
+    ).strip()
 DATABASES["default"]["CONN_MAX_AGE"] = env.int("DATABASE_CONN_MAX_AGE", default=60)
 DATABASES["default"]["CONN_HEALTH_CHECKS"] = env.bool("DATABASE_CONN_HEALTH_CHECKS", default=True)
 

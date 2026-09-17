@@ -78,3 +78,35 @@ def pending_inconsistencies_for_user(user) -> QuerySet[AttendanceInconsistency]:
             AttendanceInconsistencyStatusChoices.VALIDATED,
         ]
     )
+
+
+def nearby_marks_for_inconsistency(inconsistency: AttendanceInconsistency) -> QuerySet[AttendanceRawRecord]:
+    """Retorna las marcaciones del mismo monitor y día para explicar la inconsistencia."""
+
+    queryset = AttendanceRawRecord.objects.select_related(
+        "monitor",
+        "paired_record",
+        "duplicate_of",
+    ).filter(work_day=inconsistency.work_day)
+    if inconsistency.monitor_id:
+        queryset = queryset.filter(monitor_id=inconsistency.monitor_id)
+    else:
+        queryset = queryset.filter(
+            normalized_full_name=inconsistency.raw_record.normalized_full_name,
+            normalized_department=inconsistency.raw_record.normalized_department,
+        )
+    return queryset.order_by("event_at", "entry_at", "row_number")
+
+
+def nearby_schedules_for_inconsistency(inconsistency: AttendanceInconsistency):
+    """Retorna los bloques activos del monitor para el día de la inconsistencia."""
+
+    from apps.schedules.models import Schedule
+
+    if inconsistency.monitor_id is None:
+        return Schedule.objects.none()
+    return Schedule.objects.filter(
+        monitor_id=inconsistency.monitor_id,
+        weekday=inconsistency.work_day.weekday(),
+        is_active=True,
+    ).order_by("start_time", "end_time")

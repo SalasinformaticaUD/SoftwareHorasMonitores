@@ -31,6 +31,8 @@ class Annotation(BaseModel):
         ]
 
     def clean(self):
+        if self.action in (AnnotationActionChoices.ADD, AnnotationActionChoices.DEDUCT) and not self.delta_minutes:
+            raise ValidationError("Una anotación de ajuste debe ser de al menos 0.01 horas.")
         if self.action == AnnotationActionChoices.ADD and self.delta_minutes < 0:
             raise ValidationError("Una anotación de suma no puede tener delta negativo.")
         if self.action == AnnotationActionChoices.DEDUCT and self.delta_minutes > 0:

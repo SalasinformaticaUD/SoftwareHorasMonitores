@@ -619,11 +619,11 @@ def annotate_attendance_inconsistency(
         delta_minutes=delta_minutes,
         occurred_on=inconsistency.work_day,
     )
-    inconsistency.status = AttendanceInconsistencyStatusChoices.RESOLVED
-    inconsistency.validated_by = actor
-    inconsistency.validated_at = timezone.now()
-    inconsistency.resolution_note = description
-    inconsistency.save(update_fields=["status", "validated_by", "validated_at", "resolution_note", "updated_at"])
+    link_annotation_to_inconsistency(
+        inconsistency=inconsistency,
+        annotation=annotation,
+        actor=actor,
+    )
     return annotation
 
 

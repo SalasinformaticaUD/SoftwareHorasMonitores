@@ -162,7 +162,7 @@ def get_current_semester() -> AcademicSemester:
     semester = AcademicSemester.objects.filter(is_active=True).first()
     if semester:
         return semester
-    return AcademicSemester.objects.create(name="2026-1", is_active=True)
+    return AcademicSemester.objects.create(name="2026-3", is_active=True)
 
 
 def _user_by_email_or_username(email: str):

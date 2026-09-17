@@ -292,12 +292,32 @@ class CommitmentActSignedPdfAPIView(views.APIView):
 
 
 class CommitmentActPdfAPIView(views.APIView):
-    permission_classes = [IsAdminOrLeader]
+    permission_classes = [permissions.IsAuthenticated]
 
-    def get(self, request, monitor_id):
-        monitor = visible_monitors_for_user(request.user).get(pk=monitor_id)
+    def get(self, request, monitor_id=None):
+        if request.user.role in {UserRoleChoices.ADMIN, UserRoleChoices.LEADER}:
+            if monitor_id is None:
+                monitor = request.user.monitor_profile
+                if monitor is None:
+                    raise NotFound("El usuario autenticado no tiene un perfil de monitor asociado.")
+            else:
+                monitor = get_object_or_404(
+                    visible_monitors_for_user(request.user),
+                    pk=monitor_id,
+                )
+        else:
+            monitor = request.user.monitor_profile
+            if monitor is None:
+                raise NotFound("El usuario autenticado no tiene un perfil de monitor asociado.")
+            if monitor_id is not None and monitor.pk != monitor_id:
+                raise PermissionDenied("No puedes generar el acta de otro monitor.")
         pdf = build_monitor_commitment_act_pdf(monitor=monitor, user=request.user)
-        return FileResponse(BytesIO(pdf), content_type="application/pdf")
+        return FileResponse(
+            BytesIO(pdf),
+            content_type="application/pdf",
+            as_attachment=True,
+            filename=f"Acta_Compromiso_{monitor.codigo_estudiante}.pdf",
+        )
 
 
 class HistoricalReportAPIView(views.APIView):

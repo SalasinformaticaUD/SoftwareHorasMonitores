@@ -1,78 +1,52 @@
-import base64
-import hashlib
-import hmac
-import json
-import time
-import uuid
-
 import pytest
 from django.test import override_settings
 
 from tests.factories import AdminUserFactory, UserFactory
 
 
-def _token(*, secret, subject, username="leader.physics", expires_in=300):
-    def encode(value):
-        return base64.urlsafe_b64encode(json.dumps(value, separators=(",", ":")).encode()).rstrip(b"=").decode()
-
-    header = encode({"alg": "HS256", "typ": "JWT"})
-    payload = encode(
-        {
-            "sub": str(subject),
-            "nombreUsuario": username,
-            "roles": ["LIDER"],
-            "permisos": ["MONITORES_LEER"],
-            "iat": int(time.time()),
-            "exp": int(time.time()) + expires_in,
-        }
-    )
-    signature = hmac.new(secret.encode(), f"{header}.{payload}".encode(), hashlib.sha256).digest()
-    return f"{header}.{payload}.{base64.urlsafe_b64encode(signature).rstrip(b'=').decode()}"
-
-
 @pytest.mark.django_db
-@override_settings(PLATFORM_JWT_SECRET="platform-test-secret")
-def test_platform_jwt_authenticates_a_linked_local_profile(api_client):
-    external_user_id = uuid.uuid4()
-    user = UserFactory(usuario_externo_id=external_user_id)
-    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {_token(secret='platform-test-secret', subject=external_user_id)}")
+def test_local_session_authenticates_a_monitores_profile(api_client):
+    user = UserFactory()
+    api_client.force_authenticate(user=user)
 
-    response = api_client.get("/api/v1/platform/me/")
+    response = api_client.get("/api/v1/auth/me/")
 
     assert response.status_code == 200
-    assert response.data["usuario"]["id"] == str(user.id)
-    assert response.data["plataforma"]["usuarioExternoId"] == str(external_user_id)
+    assert response.data["id"] == str(user.id)
 
 
 @pytest.mark.django_db
-@override_settings(PLATFORM_JWT_SECRET="platform-test-secret")
-def test_platform_jwt_rejects_an_unlinked_user(api_client):
-    api_client.credentials(
-        HTTP_AUTHORIZATION=f"Bearer {_token(secret='platform-test-secret', subject=uuid.uuid4())}"
-    )
+def test_local_session_rejects_anonymous_user(api_client):
+    response = api_client.get("/api/v1/auth/me/")
 
-    response = api_client.get("/api/v1/platform/me/")
-
-    assert response.status_code == 401
+    assert response.status_code == 403
 
 
 @pytest.mark.django_db
-@override_settings(PLATFORM_JWT_SECRET="platform-test-secret")
-def test_platform_syncs_only_the_exact_admin_identity(api_client):
-    admin = AdminUserFactory(username="admin", usuario_externo_id=uuid.uuid4())
-    central_id = uuid.uuid4()
-    api_client.credentials(
-        HTTP_AUTHORIZATION=(
-            f"Bearer {_token(secret='platform-test-secret', subject=central_id, username='admin')}"
-        )
-    )
+def test_local_admin_identity_can_access_the_monitores_session(api_client):
+    admin = AdminUserFactory(username="admin")
+    api_client.force_authenticate(user=admin)
 
-    response = api_client.post("/api/v1/platform/sync-admin-identity/")
+    response = api_client.get("/api/v1/auth/me/")
 
     assert response.status_code == 200
-    admin.refresh_from_db()
-    assert admin.usuario_externo_id == central_id
-    assert api_client.get("/api/v1/platform/me/").status_code == 200
+    assert response.data["role"] == "admin"
+
+
+@pytest.mark.django_db
+def test_local_session_can_verify_its_own_password(api_client):
+    user = UserFactory()
+    user.set_password("ClaveSegura123456789")
+    user.save()
+    api_client.force_authenticate(user=user)
+
+    accepted = api_client.post("/api/v1/auth/verify-password/", {"password": "ClaveSegura123456789"})
+    rejected = api_client.post("/api/v1/auth/verify-password/", {"password": "incorrecta"})
+
+    assert accepted.status_code == 200
+    assert accepted.data == {"valido": True}
+    assert rejected.status_code == 200
+    assert rejected.data == {"valido": False}
 
 
 @pytest.mark.django_db

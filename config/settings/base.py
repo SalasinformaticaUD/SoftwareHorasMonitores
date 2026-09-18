@@ -17,16 +17,16 @@ DEBUG = env("DEBUG")
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost", "127.0.0.1","10.20.150.11","192.168.56.1"])
 CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
 CORS_ALLOWED_ORIGINS = env.list("FRONTEND_URL", default=[])
+# Solo se usa para el pase temporal de admin desde Aulas; no autentica las
+# peticiones ordinarias de Monitores.
 PLATFORM_JWT_SECRET = env("PLATFORM_JWT_SECRET", default="")
-PLATFORM_API_URL = env("PLATFORM_API_URL", default="")
-MONITORES_SERVICE_TOKEN = env("MONITORES_SERVICE_TOKEN", default="")
-PLATFORM_API_TIMEOUT_SECONDS = env.float("PLATFORM_API_TIMEOUT_SECONDS", default=5)
 APP_ENV = env("APP_ENV", default="local")
 LOG_LEVEL = env("LOG_LEVEL", default="INFO")
 
 INSTALLED_APPS = [
     "django.contrib.auth",
     "django.contrib.contenttypes",
+    "django.contrib.sessions",
     "rest_framework",
     "drf_spectacular",
     "apps.common",
@@ -42,6 +42,9 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
     "apps.common.middleware.PlatformCorsMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
@@ -87,6 +90,26 @@ MEDIA_ROOT = BASE_DIR / "media"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 AUTH_USER_MODEL = "users.User"
+SESSION_COOKIE_NAME = "monitores_sessionid"
+CSRF_COOKIE_NAME = "monitores_csrftoken"
+PASSWORD_HASHERS = [
+    "django.contrib.auth.hashers.BCryptPasswordHasher",
+    "django.contrib.auth.hashers.PBKDF2PasswordHasher",
+    "django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher",
+    "django.contrib.auth.hashers.Argon2PasswordHasher",
+]
+TEMPLATES = [
+    {
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [BASE_DIR / "templates"],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.request",
+            ],
+        },
+    }
+]
 
 PUBLIC_LOOKUP_LIMIT = 10
 PUBLIC_LOOKUP_WINDOW_SECONDS = 3600
@@ -100,7 +123,7 @@ CACHES = {
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "apps.common.authentication.PlatformJWTAuthentication",
+        "rest_framework.authentication.SessionAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",

@@ -17,6 +17,10 @@ class ScheduleSerializer(serializers.ModelSerializer):
             "weekday",
             "start_time",
             "end_time",
+            "asignatura",
+            "grupo",
+            "docente",
+            "proyecto_curricular",
             "location",
             "is_active",
         )
@@ -27,6 +31,12 @@ class ScheduleSerializer(serializers.ModelSerializer):
             "weekday": attrs.get("weekday", getattr(self.instance, "weekday", None)),
             "start_time": attrs.get("start_time", getattr(self.instance, "start_time", None)),
             "end_time": attrs.get("end_time", getattr(self.instance, "end_time", None)),
+            "asignatura": attrs.get("asignatura", getattr(self.instance, "asignatura", "")),
+            "grupo": attrs.get("grupo", getattr(self.instance, "grupo", "")),
+            "docente": attrs.get("docente", getattr(self.instance, "docente", "")),
+            "proyecto_curricular": attrs.get(
+                "proyecto_curricular", getattr(self.instance, "proyecto_curricular", "")
+            ),
             "location": attrs.get("location", getattr(self.instance, "location", "")),
             "is_active": attrs.get("is_active", getattr(self.instance, "is_active", True)),
         }

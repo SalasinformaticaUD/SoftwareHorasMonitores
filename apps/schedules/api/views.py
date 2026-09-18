@@ -1,5 +1,5 @@
 from django.core.exceptions import ValidationError as DjangoValidationError
-from rest_framework import viewsets
+from rest_framework import decorators, response, status, viewsets
 from rest_framework.exceptions import PermissionDenied, ValidationError
 
 from apps.common.choices import UserRoleChoices
@@ -8,7 +8,11 @@ from apps.monitors.selectors import visible_monitors_for_user
 from apps.schedules.selectors import visible_schedule_exceptions_for_user
 from apps.schedules.api.serializers import ScheduleExceptionSerializer, ScheduleSerializer
 from apps.schedules.models import Schedule, ScheduleException
-from apps.schedules.services import delete_schedule_exception, save_schedule_exception
+from apps.schedules.services import (
+    delete_schedule_exception,
+    import_schedule_rows_from_workbook,
+    save_schedule_exception,
+)
 
 
 class ScheduleViewSet(viewsets.ModelViewSet):
@@ -31,6 +35,28 @@ class ScheduleViewSet(viewsets.ModelViewSet):
         if self.request.user.role != UserRoleChoices.ADMIN and monitor.department != self.request.user.department:
             raise PermissionDenied("No puedes editar horarios de otra dependencia.")
         serializer.save()
+
+    @decorators.action(detail=False, methods=["post"], url_path="import")
+    def import_workbook(self, request):
+        uploaded_file = request.FILES.get("file")
+        if uploaded_file is None:
+            raise ValidationError({"file": "Selecciona un archivo Excel para importar."})
+        try:
+            result = import_schedule_rows_from_workbook(
+                uploaded_file=uploaded_file,
+                actor=request.user,
+            )
+        except DjangoValidationError as exc:
+            raise ValidationError(exc.messages) from exc
+        return response.Response(
+            {
+                "total_rows": result.total_rows,
+                "created": result.created,
+                "skipped": [issue.__dict__ for issue in result.skipped],
+                "errors": [issue.__dict__ for issue in result.errors],
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class ScheduleExceptionViewSet(viewsets.ModelViewSet):

@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from django.contrib.auth import get_user_model
+from django.contrib.auth import get_user_model, login
 from django.db import transaction
 from rest_framework import permissions
 from rest_framework.exceptions import AuthenticationFailed
@@ -68,3 +68,34 @@ class PlatformAdminIdentityAPIView(APIView):
             admin.usuario_externo_id = external_user_id
             admin.save(update_fields=["usuario_externo_id", "updated_at"])
         return Response({"vinculado": True})
+
+
+class PlatformAdminHandoffAPIView(APIView):
+    """Abre una sesión local de Monitores para el administrador de Aulas.
+
+    Es el único puente entre aplicaciones: no provisiona usuarios ni permite
+    que monitores o líderes de Aulas entren a este sistema.
+    """
+
+    permission_classes = [permissions.AllowAny]
+    authentication_classes = []
+
+    def post(self, request):
+        header = request.headers.get("Authorization", "")
+        scheme, _, token = header.partition(" ")
+        if scheme.lower() != "bearer" or not token:
+            raise AuthenticationFailed("Se requiere un JWT central válido.")
+        claims = PlatformJWTAuthentication()._decode_and_verify(token.strip())
+        if claims.get("nombreUsuario") != "admin":
+            raise AuthenticationFailed("El pase entre aplicaciones solo está disponible para admin.")
+        try:
+            external_user_id = UUID(str(claims["sub"]))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise AuthenticationFailed("El token no contiene un sub UUID válido.") from exc
+        admin = get_user_model().objects.filter(
+            username="admin", role="admin", usuario_externo_id=external_user_id, is_active=True
+        ).first()
+        if admin is None:
+            raise AuthenticationFailed("La identidad admin no está vinculada en Monitores.")
+        login(request, admin)
+        return Response({"iniciado": True})

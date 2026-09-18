@@ -52,6 +52,35 @@ def test_schedule_exception_api_targets_monitors_and_blocks(api_client):
     assert response.data["schedules"] == [schedule.id]
 
 
+def test_schedule_api_persists_academic_fields_required_by_monitor_management(api_client):
+    admin = AdminUserFactory()
+    monitor = MonitorFactory()
+    api_client.force_authenticate(user=admin)
+
+    response = api_client.post(
+        "/api/v1/schedules/",
+        {
+            "monitor": str(monitor.id),
+            "weekday": 1,
+            "start_time": "08:00:00",
+            "end_time": "12:00:00",
+            "asignatura": "Física mecánica",
+            "grupo": "F1",
+            "docente": "Docente Física",
+            "proyecto_curricular": "licenciatura_fisica",
+            "location": "Laboratorio 504",
+            "is_active": True,
+        },
+        format="json",
+    )
+
+    assert response.status_code == 201, response.data
+    assert response.data["asignatura"] == "Física mecánica"
+    assert response.data["grupo"] == "F1"
+    assert response.data["docente"] == "Docente Física"
+    assert response.data["proyecto_curricular"] == "licenciatura_fisica"
+
+
 def test_leader_can_list_but_cannot_assign_pending_reconciliation(api_client):
     leader = UserFactory(department=DepartmentChoices.ELECTRICAL)
     monitor = MonitorFactory(department=DepartmentChoices.ELECTRICAL)

@@ -55,6 +55,7 @@ class LeaderDashboardAPIView(views.APIView):
                     "penalty_minutes": row["penalty_minutes"],
                     "remaining_minutes": row["remaining_minutes"],
                     "late_count": row["late_count"],
+                    "memorandums_count": row["memorandums_count"],
                     "has_memorandum": row["has_memorandum"],
                 }
                 for row in context["monitor_rows"]

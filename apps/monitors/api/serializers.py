@@ -17,6 +17,9 @@ class MonitorSerializer(serializers.ModelSerializer):
             "codigo_estudiante",
             "full_name",
             "department",
+            "numero_documento",
+            "proyecto_curricular",
+            "telefono",
             "is_active",
         )
 

@@ -7,7 +7,11 @@ from apps.common.permissions import IsAdminOrLeader
 from apps.monitors.api.serializers import MonitorSerializer, PlatformMonitorProvisionSerializer
 from apps.monitors.models import Monitor
 from apps.monitors.selectors import visible_monitors_for_user
-from apps.monitors.services import create_monitor_with_user, import_monitors_from_workbook
+from apps.monitors.services import (
+    create_monitor_with_user,
+    import_monitors_from_workbook,
+    update_monitor_with_user,
+)
 
 
 class MonitorViewSet(viewsets.ModelViewSet):
@@ -98,3 +102,28 @@ class MonitorViewSet(viewsets.ModelViewSet):
             },
             status=status.HTTP_200_OK,
         )
+
+    @decorators.action(detail=True, methods=["patch"], url_path="account")
+    def update_account(self, request, pk=None):
+        if request.user.role != UserRoleChoices.ADMIN:
+            raise permissions.PermissionDenied("Solo el administrador puede editar monitores.")
+        serializer = PlatformMonitorProvisionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        try:
+            monitor = update_monitor_with_user(
+                monitor=self.get_object(),
+                full_name=data["full_name"],
+                codigo_estudiante=data["codigo_estudiante"],
+                email=data["email"],
+                department=data["department"],
+                numero_documento=data["numero_documento"],
+                proyecto_curricular=data["proyecto_curricular"],
+                telefono=data["telefono"],
+                request=request,
+                actor=request.user,
+                confirm_repeating_monitor=data["confirm_repeating_monitor"],
+            )
+        except DjangoValidationError as exc:
+            raise exceptions.ValidationError(exc.messages) from exc
+        return response.Response(MonitorSerializer(monitor).data)

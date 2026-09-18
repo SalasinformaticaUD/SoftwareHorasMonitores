@@ -152,3 +152,35 @@ def test_admin_can_import_schedules_from_excel(api_client):
     assert response.status_code == 200, response.data
     assert response.data["total_rows"] == 1
     assert response.data["created"] == 1
+
+
+@pytest.mark.django_db
+def test_admin_can_update_a_monitor_account(api_client):
+    admin = AdminUserFactory()
+    monitor_user = UserFactory(email="anterior@udistrital.edu.co")
+    monitor = MonitorFactory(
+        user=monitor_user,
+        full_name="Nombre Anterior",
+        codigo_estudiante="20260003",
+    )
+    api_client.force_authenticate(user=admin)
+
+    response = api_client.patch(
+        f"/api/v1/monitors/{monitor.id}/account/",
+        {
+            "full_name": "Nombre Actualizado",
+            "codigo_estudiante": "20260004",
+            "email": "actualizado@udistrital.edu.co",
+            "department": "physics",
+            "numero_documento": "10101012",
+            "proyecto_curricular": "ingenieria_sistemas",
+            "telefono": "3001234569",
+            "confirm_repeating_monitor": False,
+        },
+        format="json",
+    )
+
+    assert response.status_code == 200, response.data
+    assert response.data["full_name"] == "Nombre Actualizado"
+    assert response.data["user_email"] == "actualizado@udistrital.edu.co"
+    assert response.data["numero_documento"] == "10101012"

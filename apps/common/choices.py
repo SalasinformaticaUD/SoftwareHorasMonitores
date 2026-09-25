@@ -97,3 +97,4 @@ class NotificationEventChoices(models.TextChoices):
     OVERTIME_REVIEWED = "overtime_reviewed", "Horas extra revisadas"
     ANNOTATION_CREATED = "annotation_created", "Anotación creada"
     REPORT_GENERATED = "report_generated", "Reporte generado"
+    COMMITMENT_ACT_REVIEWED = "commitment_act_reviewed", "Acta de compromiso revisada"

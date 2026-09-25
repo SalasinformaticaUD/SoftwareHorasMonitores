@@ -619,7 +619,7 @@ def available_dashboard_departments_for_user(user) -> list[tuple[str, str]]:
     return departments
 
 
-def build_dashboard_context(user) -> dict:
+def build_dashboard_context(user, department: str | None = None) -> dict:
     """Construye el contexto principal del dashboard administrativo.
 
     Args:

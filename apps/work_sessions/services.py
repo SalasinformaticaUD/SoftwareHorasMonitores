@@ -452,6 +452,7 @@ def review_overtime(
             aggregate_id=str(session.id),
             payload={
                 "session_id": str(session.id),
+                "monitor_id": str(session.monitor_id),
                 "department": session.monitor.department,
                 "decision": decision,
             },

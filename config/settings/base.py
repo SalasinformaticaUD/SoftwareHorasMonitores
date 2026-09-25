@@ -20,6 +20,7 @@ CORS_ALLOWED_ORIGINS = env.list("FRONTEND_URL", default=[])
 # Solo se usa para el pase temporal de admin desde Aulas; no autentica las
 # peticiones ordinarias de Monitores.
 PLATFORM_JWT_SECRET = env("PLATFORM_JWT_SECRET", default="")
+MONITORES_SERVICE_TOKEN = env("MONITORES_SERVICE_TOKEN", default="")
 APP_ENV = env("APP_ENV", default="local")
 LOG_LEVEL = env("LOG_LEVEL", default="INFO")
 
@@ -123,6 +124,7 @@ CACHES = {
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
+        "apps.common.authentication.PlatformJWTAuthentication",
         "rest_framework.authentication.SessionAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [

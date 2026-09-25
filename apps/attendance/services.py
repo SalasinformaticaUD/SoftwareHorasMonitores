@@ -657,8 +657,6 @@ def link_annotation_to_inconsistency(*, inconsistency: AttendanceInconsistency, 
 
 @transaction.atomic
 def invalidate_inconsistent_raw_record(*, inconsistency: AttendanceInconsistency, actor, reason: str):
-    if inconsistency.solution_annotation_id is None:
-        raise ValidationError("Antes de invalidar el registro debes registrar una anotacion como solucion.")
     raw_record = reject_raw_record(raw_record=inconsistency.raw_record, actor=actor, reason=reason)
     inconsistency.status = AttendanceInconsistencyStatusChoices.RESOLVED
     inconsistency.validated_by = actor

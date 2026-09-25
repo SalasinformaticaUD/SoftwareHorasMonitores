@@ -108,6 +108,12 @@ class AttendanceInconsistencySerializer(serializers.ModelSerializer):
     )
     status_label = serializers.CharField(source="get_status_display", read_only=True)
     weekday = serializers.SerializerMethodField()
+    solution_annotation_description = serializers.CharField(
+        source="solution_annotation.description", read_only=True, allow_null=True
+    )
+    solution_annotation_delta_minutes = serializers.IntegerField(
+        source="solution_annotation.delta_minutes", read_only=True, allow_null=True
+    )
 
     class Meta:
         model = AttendanceInconsistency
@@ -130,6 +136,8 @@ class AttendanceInconsistencySerializer(serializers.ModelSerializer):
             "message",
             "resolution_note",
             "solution_annotation",
+            "solution_annotation_description",
+            "solution_annotation_delta_minutes",
             "event_at",
             "pairing_status",
             "pairing_status_label",

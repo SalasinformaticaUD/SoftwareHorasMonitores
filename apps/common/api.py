@@ -43,6 +43,9 @@ class PlatformAdminIdentityAPIView(APIView):
 
     permission_classes = [permissions.AllowAny]
     authentication_classes = []
+    # Este puente valida explícitamente el JWT central; no debe competir con
+    # el límite destinado a consultas públicas por IP.
+    throttle_classes = []
 
     def post(self, request):
         header = request.headers.get("Authorization", "")
@@ -71,14 +74,14 @@ class PlatformAdminIdentityAPIView(APIView):
 
 
 class PlatformAdminHandoffAPIView(APIView):
-    """Abre una sesión local de Monitores para el administrador de Aulas.
-
-    Es el único puente entre aplicaciones: no provisiona usuarios ni permite
-    que monitores o líderes de Aulas entren a este sistema.
-    """
+    """Abre la sesión local de Monitores para una identidad central vinculada."""
 
     permission_classes = [permissions.AllowAny]
     authentication_classes = []
+    # El JWT central se comprueba dentro de ``post``. Al no usar una clase de
+    # autenticación DRF, el límite anónimo lo clasificaba erróneamente como
+    # tráfico público y terminaba bloqueando el cambio entre aplicaciones.
+    throttle_classes = []
 
     def post(self, request):
         header = request.headers.get("Authorization", "")
@@ -86,16 +89,15 @@ class PlatformAdminHandoffAPIView(APIView):
         if scheme.lower() != "bearer" or not token:
             raise AuthenticationFailed("Se requiere un JWT central válido.")
         claims = PlatformJWTAuthentication()._decode_and_verify(token.strip())
-        if claims.get("nombreUsuario") != "admin":
-            raise AuthenticationFailed("El pase entre aplicaciones solo está disponible para admin.")
+
         try:
             external_user_id = UUID(str(claims["sub"]))
         except (KeyError, TypeError, ValueError) as exc:
             raise AuthenticationFailed("El token no contiene un sub UUID válido.") from exc
         admin = get_user_model().objects.filter(
-            username="admin", role="admin", usuario_externo_id=external_user_id, is_active=True
+            usuario_externo_id=external_user_id, is_active=True
         ).first()
         if admin is None:
-            raise AuthenticationFailed("La identidad admin no está vinculada en Monitores.")
+            raise AuthenticationFailed("La identidad de Aulas no está vinculada ni habilitada en Monitores.")
         login(request, admin)
         return Response({"iniciado": True})

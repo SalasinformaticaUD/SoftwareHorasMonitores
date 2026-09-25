@@ -1,14 +1,12 @@
 from datetime import date, datetime
 
 import pytest
-from django.core.exceptions import ValidationError
 from django.utils import timezone
 
 from apps.attendance.models import AttendanceInconsistency, AttendanceRawRecord
 from apps.attendance.services import (
     annotate_attendance_inconsistency,
     invalidate_inconsistent_raw_record,
-    link_annotation_to_inconsistency,
     pair_raw_attendance_events,
 )
 from apps.attendance.selectors import (
@@ -23,7 +21,7 @@ from apps.common.choices import (
     AttendancePairingStatusChoices,
     ReconciliationStatusChoices,
 )
-from tests.factories import AnnotationFactory, AttendanceImportJobFactory, MonitorFactory, UserFactory
+from tests.factories import AttendanceImportJobFactory, MonitorFactory, UserFactory
 
 
 def raw_event(*, import_job, monitor, event_at, row_number):
@@ -178,7 +176,7 @@ def test_pair_raw_attendance_events_detects_short_pair_without_processing_it():
 
 
 @pytest.mark.django_db
-def test_unpaired_inconsistent_raw_record_requires_solution_annotation_before_invalidation():
+def test_unpaired_inconsistent_raw_record_can_be_invalidated_with_reason():
     leader = UserFactory()
     import_job = AttendanceImportJobFactory(uploaded_by=leader)
     monitor = MonitorFactory(full_name="Ana Torres", department=leader.department)
@@ -189,25 +187,18 @@ def test_unpaired_inconsistent_raw_record_requires_solution_annotation_before_in
         inconsistency_type=AttendanceInconsistencyTypeChoices.END_OF_DAY,
     )
 
-    with pytest.raises(ValidationError):
-        invalidate_inconsistent_raw_record(inconsistency=inconsistency, actor=leader, reason="Se resuelve sin ajuste de horas.")
-
-    annotation = AnnotationFactory(
-        leader=leader,
-        monitor=monitor,
-        annotation_type=AnnotationTypeChoices.MISSING_PUNCH,
-        action=AnnotationActionChoices.NOTE,
-        delta_minutes=0,
-        occurred_on=date(2026, 4, 13),
+    invalidate_inconsistent_raw_record(
+        inconsistency=inconsistency,
+        actor=leader,
+        reason="Marcación sin ajuste de horas.",
     )
-    link_annotation_to_inconsistency(inconsistency=inconsistency, annotation=annotation, actor=leader)
-    invalidate_inconsistent_raw_record(inconsistency=inconsistency, actor=leader, reason="Se resuelve con anotacion.")
 
     unpaired.refresh_from_db()
     inconsistency.refresh_from_db()
     assert unpaired.reconciliation_status == ReconciliationStatusChoices.REJECTED
     assert inconsistency.status == AttendanceInconsistencyStatusChoices.RESOLVED
-    assert inconsistency.solution_annotation == annotation
+    assert inconsistency.solution_annotation is None
+    assert inconsistency.resolution_note == "Marcación sin ajuste de horas."
 
 
 @pytest.mark.django_db
@@ -234,7 +225,7 @@ def test_creating_solution_annotation_links_it_to_inconsistency():
 
 
 @pytest.mark.django_db
-def test_short_pair_requires_solution_annotation_before_invalidation():
+def test_short_pair_can_be_invalidated_with_reason():
     leader = UserFactory()
     import_job = AttendanceImportJobFactory(uploaded_by=leader)
     monitor = MonitorFactory(full_name="Ana Torres", department=leader.department)
@@ -246,21 +237,15 @@ def test_short_pair_requires_solution_annotation_before_invalidation():
         inconsistency_type=AttendanceInconsistencyTypeChoices.SHORT_PAIR,
     )
 
-    with pytest.raises(ValidationError):
-        invalidate_inconsistent_raw_record(inconsistency=inconsistency, actor=leader, reason="Correccion aplicada.")
-
-    annotation = AnnotationFactory(
-        leader=leader,
-        monitor=monitor,
-        annotation_type=AnnotationTypeChoices.MISSING_PUNCH,
-        action=AnnotationActionChoices.ADD,
-        delta_minutes=60,
-        occurred_on=date(2026, 4, 13),
+    invalidate_inconsistent_raw_record(
+        inconsistency=inconsistency,
+        actor=leader,
+        reason="Par corto sin ajuste de horas.",
     )
-    link_annotation_to_inconsistency(inconsistency=inconsistency, annotation=annotation, actor=leader)
-    invalidate_inconsistent_raw_record(inconsistency=inconsistency, actor=leader, reason="Correccion aplicada.")
 
     entry.refresh_from_db()
     inconsistency.refresh_from_db()
     assert entry.reconciliation_status == ReconciliationStatusChoices.REJECTED
     assert inconsistency.status == AttendanceInconsistencyStatusChoices.RESOLVED
+    assert inconsistency.solution_annotation is None
+    assert inconsistency.resolution_note == "Par corto sin ajuste de horas."

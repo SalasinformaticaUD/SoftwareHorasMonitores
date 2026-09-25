@@ -157,3 +157,28 @@ def test_commitment_act_list_includes_monitors_without_submission(api_client, tm
     assert row["submission_id"] is None
     assert row["status"] == CommitmentActStatusChoices.PENDING
     assert row["reviewed_at"] is None
+
+
+def test_commitment_act_list_ignores_submission_whose_file_is_missing(api_client, tmp_path, settings):
+    settings.MEDIA_ROOT = tmp_path
+    admin = AdminUserFactory()
+    monitor = MonitorFactory()
+    submission = CommitmentActSubmission.objects.create(
+        monitor=monitor,
+        signed_file=SimpleUploadedFile(
+            "acta-faltante.pdf",
+            b"%PDF-1.4 signed",
+            content_type="application/pdf",
+        ),
+    )
+    submission.signed_file.delete(save=False)
+    api_client.force_authenticate(user=admin)
+
+    response = api_client.get("/api/v1/reports/commitment-acts/")
+
+    assert response.status_code == 200, response.data
+    row = next(item for item in response.data if item["monitor"] == str(monitor.id))
+    assert row["submission_id"] == str(submission.id)
+    assert row["has_signed"] is False
+    assert row["signed_file_name"] == ""
+    assert row["uploaded_at"] is None

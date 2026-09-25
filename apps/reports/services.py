@@ -208,7 +208,12 @@ def commitment_act_status_for_monitor(monitor) -> CommitmentActStatus:
     status = CommitmentActStatusChoices.PENDING
     rejection_reason = ""
     if submission:
-        signed_file = Path(submission.signed_file.path) if submission.signed_file else None
+        candidate = Path(submission.signed_file.path) if submission.signed_file else None
+        # La base de datos puede conservar la referencia a un PDF que ya no
+        # existe en MEDIA_ROOT (por ejemplo, después de restaurar la base sin
+        # restaurar el volumen de archivos). Esa inconsistencia no debe tumbar
+        # todo el listado administrativo de actas.
+        signed_file = candidate if candidate and candidate.is_file() else None
         status = submission.status
         rejection_reason = submission.rejection_reason
     else:

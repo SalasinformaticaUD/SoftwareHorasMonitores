@@ -4,12 +4,15 @@ from rest_framework import decorators, exceptions, permissions, response, status
 
 from apps.common.choices import UserRoleChoices
 from apps.common.permissions import IsAdminOrLeader
-from apps.monitors.api.serializers import MonitorSerializer, PlatformMonitorProvisionSerializer
+from apps.monitors.api.serializers import MonitorSerializer, PlatformMonitorProvisionSerializer, SemesterResetSerializer
 from apps.monitors.models import Monitor
 from apps.monitors.selectors import visible_monitors_for_user
 from apps.monitors.services import (
     create_monitor_with_user,
     import_monitors_from_workbook,
+    reset_semester_data,
+    resend_monitor_activation,
+    semester_reset_preview_counts,
     update_monitor_with_user,
 )
 
@@ -53,8 +56,7 @@ class MonitorViewSet(viewsets.ModelViewSet):
 
     @decorators.action(detail=False, methods=["post"], url_path="provision")
     def provision(self, request):
-        if request.user.role != UserRoleChoices.ADMIN:
-            raise permissions.PermissionDenied("Solo el administrador puede crear monitores.")
+        # El servicio aplica el límite de dependencia para los líderes.
         serializer = PlatformMonitorProvisionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
@@ -103,6 +105,32 @@ class MonitorViewSet(viewsets.ModelViewSet):
             status=status.HTTP_200_OK,
         )
 
+    @decorators.action(detail=False, methods=["get", "post"], url_path="new-semester")
+    def new_semester(self, request):
+        if request.user.role != UserRoleChoices.ADMIN:
+            raise permissions.PermissionDenied("Solo el administrador puede iniciar un semestre nuevo.")
+        if request.method == "GET":
+            return response.Response({"preview": semester_reset_preview_counts()})
+
+        serializer = SemesterResetSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        try:
+            result = reset_semester_data(
+                new_semester_name=data["new_semester_name"].strip(),
+                starts_on=data["starts_on"],
+                ends_on=data["ends_on"],
+            )
+        except DjangoValidationError as exc:
+            raise exceptions.ValidationError(exc.messages) from exc
+        return response.Response({
+            "archived_semester": result.archived_semester.name,
+            "new_semester": result.new_semester.name,
+            "starts_on": result.new_semester.starts_on,
+            "ends_on": result.new_semester.ends_on,
+            "affected": result.deleted_counts,
+        })
+
     @decorators.action(detail=True, methods=["patch"], url_path="account")
     def update_account(self, request, pk=None):
         if request.user.role != UserRoleChoices.ADMIN:
@@ -127,3 +155,15 @@ class MonitorViewSet(viewsets.ModelViewSet):
         except DjangoValidationError as exc:
             raise exceptions.ValidationError(exc.messages) from exc
         return response.Response(MonitorSerializer(monitor).data)
+
+    @decorators.action(detail=True, methods=["post"], url_path="resend-activation")
+    def resend_activation(self, request, pk=None):
+        if request.user.role != UserRoleChoices.ADMIN:
+            raise permissions.PermissionDenied("Solo el administrador puede reenviar correos de activación.")
+        try:
+            sent = resend_monitor_activation(monitor=self.get_object(), request=request)
+        except DjangoValidationError as exc:
+            raise exceptions.ValidationError(exc.messages) from exc
+        if not sent:
+            raise exceptions.ValidationError({"detail": "No fue posible preparar el correo de activación para este monitor."})
+        return response.Response({"detail": "Correo de activación enviado correctamente."})

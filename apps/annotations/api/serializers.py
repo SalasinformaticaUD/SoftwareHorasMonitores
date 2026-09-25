@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from django.core.exceptions import ValidationError as DjangoValidationError
 
 from apps.annotations.models import Annotation
 from apps.annotations.services import create_annotation, update_annotation
@@ -27,7 +28,10 @@ class AnnotationSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         request = self.context["request"]
-        return create_annotation(leader=request.user, **validated_data)
+        try:
+            return create_annotation(leader=request.user, **validated_data)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError({"detail": exc.messages})
 
     def update(self, instance, validated_data):
         request = self.context["request"]
@@ -40,4 +44,7 @@ class AnnotationSerializer(serializers.ModelSerializer):
             "occurred_on": validated_data.get("occurred_on", instance.occurred_on),
             "session": validated_data.get("session", instance.session),
         }
-        return update_annotation(actor=request.user, annotation=instance, **payload)
+        try:
+            return update_annotation(actor=request.user, annotation=instance, **payload)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError({"detail": exc.messages})

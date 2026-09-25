@@ -42,7 +42,14 @@ class ScheduleSerializer(serializers.ModelSerializer):
         }
         schedule = Schedule(**data)
         if self.instance:
+            # `full_clean()` ejecuta también las validaciones de unicidad.
+            # Al construir una instancia temporal Django la marca como nueva
+            # (`_state.adding=True`) y termina detectando el propio registro
+            # como duplicado. Marcarla como existente permite que excluya su
+            # PK al validar una edición.
             schedule.pk = self.instance.pk
+            schedule._state.adding = False
+            schedule._state.db = self.instance._state.db
         try:
             schedule.full_clean()
         except DjangoValidationError as exc:

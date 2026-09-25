@@ -6,6 +6,7 @@ activacion usando el mecanismo de restablecimiento de contrasena de Django.
 """
 
 from dataclasses import dataclass, field
+from datetime import date
 from typing import Any
 from uuid import UUID
 
@@ -266,6 +267,27 @@ def create_monitor_with_user(
     with transaction.atomic():
         semester = get_current_semester()
         user = _user_by_email_or_username(email)
+        current_semester_matches = Monitor.objects.filter(semester=semester)
+        duplicate_filters = Q(codigo_estudiante__iexact=codigo_estudiante)
+        if user is not None:
+            duplicate_filters |= Q(user=user)
+        if numero_documento:
+            duplicate_filters |= Q(numero_documento__iexact=numero_documento)
+        duplicate = current_semester_matches.filter(duplicate_filters).select_related("user", "semester").first()
+        if duplicate is not None:
+            coincidencias = []
+            if duplicate.codigo_estudiante.lower() == codigo_estudiante.lower():
+                coincidencias.append("código estudiantil")
+            if user is not None and duplicate.user_id == user.id:
+                coincidencias.append("correo/cuenta")
+            if numero_documento and duplicate.numero_documento.lower() == numero_documento.lower():
+                coincidencias.append("número de documento")
+            raise ValidationError(
+                "El monitor ya existe en el semestre {0} ({1}). Edita el registro existente en lugar de crear uno nuevo.".format(
+                    semester.name,
+                    ", ".join(coincidencias) or "identidad coincidente",
+                )
+            )
         historical_monitor = _historical_monitor_match(email=email, codigo_estudiante=codigo_estudiante)
         if historical_monitor and historical_monitor.user and user and historical_monitor.user_id != user.id:
             raise ValidationError(
@@ -274,8 +296,6 @@ def create_monitor_with_user(
                     historical_monitor.user.email,
                 )
             )
-        if historical_monitor is not None and not confirm_repeating_monitor:
-            raise ValidationError(_repeating_monitor_confirmation_message(historical_monitor))
         if historical_monitor and historical_monitor.user and user is None:
             user = historical_monitor.user
             if user.email and user.email.lower() != email:
@@ -328,8 +348,9 @@ def create_monitor_with_user(
         )
         monitor.full_clean()
         monitor.save()
+    monitor._activation_email_sent = False
     if send_activation and (user_created or not user.has_usable_password()):
-        send_monitor_activation_email(user=user, request=request)
+        monitor._activation_email_sent = send_monitor_activation_email(user=user, request=request)
     return monitor
 
 
@@ -647,16 +668,6 @@ def import_monitors_from_workbook(
             if Monitor.objects.filter(codigo_estudiante__iexact=codigo, is_active=True).exists():
                 result.skipped.append(ImportIssue(row_number=row_number, email=email, reason="El codigo estudiantil ya esta activo en el semestre actual."))
                 continue
-            historical_monitor = _historical_monitor_match(email=email, codigo_estudiante=codigo)
-            if historical_monitor is not None and not confirm_repeating_monitors:
-                result.skipped.append(
-                    ImportIssue(
-                        row_number=row_number,
-                        email=email,
-                        reason=_repeating_monitor_confirmation_message(historical_monitor),
-                    )
-                )
-                continue
             create_monitor_with_user(
                 full_name=full_name,
                 codigo_estudiante=codigo,
@@ -703,7 +714,7 @@ def semester_reset_preview_counts() -> dict[str, int]:
 
 
 @transaction.atomic
-def reset_semester_data(*, new_semester_name: str = "2026-3") -> SemesterResetResult:
+def reset_semester_data(*, new_semester_name: str, starts_on: date, ends_on: date) -> SemesterResetResult:
     """Archiva el semestre actual y abre uno nuevo sin borrar historicos."""
     from apps.annotations.models import Annotation
     from apps.attendance.models import AttendanceImportJob, AttendanceInconsistency
@@ -714,6 +725,8 @@ def reset_semester_data(*, new_semester_name: str = "2026-3") -> SemesterResetRe
 
     deleted_counts = semester_reset_preview_counts()
     current_semester = get_current_semester()
+    if ends_on < starts_on:
+        raise ValidationError("La fecha final no puede ser anterior a la fecha inicial.")
     if AcademicSemester.objects.filter(name__iexact=new_semester_name).exclude(pk=current_semester.pk).exists():
         raise ValidationError("Ya existe un semestre con ese nombre.")
 
@@ -723,7 +736,12 @@ def reset_semester_data(*, new_semester_name: str = "2026-3") -> SemesterResetRe
     current_semester.archived_at = timezone.now()
     current_semester.save(update_fields=["is_active", "archived_at", "updated_at"])
 
-    new_semester = AcademicSemester.objects.create(name=new_semester_name, is_active=True)
+    new_semester = AcademicSemester.objects.create(
+        name=new_semester_name,
+        starts_on=starts_on,
+        ends_on=ends_on,
+        is_active=True,
+    )
     Notification.objects.all().delete()
 
     return SemesterResetResult(

@@ -11,4 +11,6 @@ def visible_annotations_for_user(user) -> QuerySet[Annotation]:
     )
     if user.role == UserRoleChoices.ADMIN:
         return queryset
+    if user.role == UserRoleChoices.MONITOR:
+        return queryset.filter(monitor__user=user)
     return queryset.filter(department=user.department)

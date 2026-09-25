@@ -9,11 +9,21 @@ from rest_framework import decorators, permissions, response, status, views, vie
 from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 
 from apps.common.permissions import IsAdminOrLeader
-from apps.common.choices import CommitmentActStatusChoices, UserRoleChoices
+from apps.common.choices import CommitmentActStatusChoices, NotificationEventChoices, SessionStateChoices, UserRoleChoices
 from apps.common.throttling import PublicMonitorLookupThrottle
 from apps.monitors.models import AcademicSemester
 from apps.monitors.selectors import visible_monitors_for_user
 from apps.monitors.services import get_current_semester
+from apps.notifications.services import create_notification
+from apps.work_sessions.models import WorkSession
+from apps.work_sessions.api.serializers import WorkSessionSerializer
+from apps.schedules.models import Schedule
+from apps.schedules.api.serializers import ScheduleSerializer
+from apps.annotations.models import Annotation
+from apps.annotations.api.serializers import AnnotationSerializer
+from apps.annotations.selectors import visible_annotations_for_user
+from apps.attendance.models import AttendanceInconsistency
+from apps.attendance.api.serializers import AttendanceInconsistencySerializer
 from apps.reports.api.extended_serializers import (
     CommitmentActReviewSerializer,
     CommitmentActStatusSerializer,
@@ -41,7 +51,8 @@ class LeaderDashboardAPIView(views.APIView):
     permission_classes = [IsAdminOrLeader]
 
     def get(self, request):
-        context = build_dashboard_context(request.user)
+        department = request.query_params.get("department") or None
+        context = build_dashboard_context(request.user, department=department)
         payload = {
             "monitor_rows": [
                 {
@@ -93,6 +104,30 @@ class LeaderDashboardAPIView(views.APIView):
         }
         return response.Response(payload)
 
+
+class MyMonitorDashboardAPIView(views.APIView):
+    """Panel personal del monitor autenticado, sin exponer datos de terceros."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        monitor = request.user.monitor_profile
+        if monitor is None:
+            raise NotFound("El usuario autenticado no tiene un perfil de monitor asociado.")
+        context = {"request": request}
+        schedules = Schedule.objects.filter(monitor=monitor, is_active=True).order_by("weekday", "start_time")
+        annotations = visible_annotations_for_user(request.user).filter(monitor=monitor).order_by("-occurred_on", "-created_at")[:5]
+        sessions = WorkSession.objects.filter(monitor=monitor).select_related("monitor", "schedule", "raw_record").order_by("-work_day", "-created_at")[:5]
+        late_count = WorkSession.objects.filter(
+            monitor=monitor, late_minutes__gt=0, lateness_excused=False
+        ).exclude(session_state=SessionStateChoices.INVALID).count()
+        return response.Response({
+            "monitor": {"id": str(monitor.id), "full_name": monitor.full_name, "codigo_estudiante": monitor.codigo_estudiante},
+            "schedules": ScheduleSerializer(schedules, many=True, context=context).data,
+            "recent_sessions": WorkSessionSerializer(sessions, many=True, context=context).data,
+            "recent_annotations": AnnotationSerializer(annotations, many=True, context=context).data,
+            "late_count": late_count,
+        })
 
 class MonitorReportSnapshotViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = MonitorReportSnapshotSerializer
@@ -191,7 +226,13 @@ class CommitmentActListAPIView(views.APIView):
     permission_classes = [IsAdminOrLeader]
 
     def get(self, request):
-        rows = build_commitment_act_status_rows(visible_monitors_for_user(request.user))
+        semester_name = request.query_params.get("semester", "").strip()
+        monitors = visible_monitors_for_user(request.user)
+        if semester_name:
+            monitors = monitors.filter(semester__name=semester_name)
+        else:
+            monitors = monitors.filter(is_active=True, semester__is_active=True)
+        rows = build_commitment_act_status_rows(monitors)
         return response.Response(
             CommitmentActStatusSerializer(rows, many=True, context={"request": request}).data
         )
@@ -219,6 +260,9 @@ class MyCommitmentActAPIView(views.APIView):
         serializer = CommitmentActUploadSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         monitor = self._monitor_for(request)
+        estado_actual = commitment_act_status_for_monitor(monitor)
+        if estado_actual.has_signed and estado_actual.status != CommitmentActStatusChoices.REJECTED:
+            raise ValidationError("Ya existe un acta firmada pendiente o aprobada para este monitor.")
         CommitmentActSubmission.objects.create(
             monitor=monitor,
             signed_file=serializer.validated_data["signed_file"],
@@ -262,6 +306,26 @@ class CommitmentActReviewAPIView(views.APIView):
         submission.reviewed_by = request.user
         submission.reviewed_at = timezone.now()
         submission.save()
+
+        decision_label = "aprobada" if action == "accept" else "rechazada"
+        detail = (
+            "Su acta de compromiso fue aprobada."
+            if action == "accept"
+            else f"Su acta de compromiso fue rechazada. Motivo: {submission.rejection_reason}"
+        )
+        create_notification(
+            event_type=NotificationEventChoices.COMMITMENT_ACT_REVIEWED,
+            title=f"Acta de compromiso {decision_label}",
+            body=detail,
+            department=monitor.department,
+            recipient=monitor.user,
+            payload={
+                "monitor_id": str(monitor.id),
+                "submission_id": str(submission.id),
+                "decision": submission.status,
+                "rejection_reason": submission.rejection_reason,
+            },
+        )
 
         row = commitment_act_status_for_monitor(monitor)
         return response.Response(
@@ -326,46 +390,121 @@ class HistoricalReportAPIView(views.APIView):
 
     def get(self, request):
         semester_id = request.query_params.get("semester_id")
-        semester = AcademicSemester.objects.filter(pk=semester_id).first() if semester_id else get_current_semester()
-        if semester is None:
+        semesters = (
+            AcademicSemester.objects.filter(pk=semester_id, is_active=False)
+            if semester_id
+            else AcademicSemester.objects.filter(is_active=False).order_by("-starts_on", "-name")
+        )
+        if not semesters.exists():
             return response.Response([])
         requested_department = request.query_params.get("department")
-        if requested_department:
-            departments = [requested_department]
-        elif request.user.role == UserRoleChoices.ADMIN:
-            departments = list(
-                visible_monitors_for_user(request.user)
-                .filter(is_active=False, semester=semester)
-                .values_list("department", flat=True)
-                .distinct()
-            )
-        else:
-            departments = [getattr(request.user, "department", "")]
+        payload = []
+        for semester in semesters:
+            if requested_department:
+                departments = [requested_department]
+            elif request.user.role == UserRoleChoices.ADMIN:
+                departments = list(
+                    visible_monitors_for_user(request.user)
+                    .filter(is_active=False, semester=semester)
+                    .values_list("department", flat=True)
+                    .distinct()
+                )
+            else:
+                departments = [getattr(request.user, "department", "")]
+            for department in departments:
+                if not department:
+                    continue
+                for row in build_historical_monitor_rows_for_user(
+                    user=request.user, department=department, semester=semester,
+                ):
+                    monitor = row["monitor"]
+                    payload.append({
+                        "semester": semester.name,
+                        "department": monitor.get_department_display(),
+                        "monitor_id": str(monitor.id),
+                        "monitor_name": monitor.full_name,
+                        "codigo_estudiante": monitor.codigo_estudiante,
+                        "normal_hours": row["normal_hours"],
+                        "approved_overtime_hours": row["approved_overtime_hours"],
+                        "pending_overtime_hours": row["pending_overtime_hours"],
+                        "annotation_hours": row["annotation_hours"],
+                        "total_hours": row["total_hours"],
+                        "remaining_hours": row["remaining_hours"],
+                    })
+        return response.Response(payload)
 
-        rows = [
-            row
-            for department in departments
-            if department
-            for row in build_historical_monitor_rows_for_user(
-                user=request.user,
-                department=department,
-                semester=semester,
-            )
-        ]
-        return response.Response([
-            {
-                "semester": semester.name,
-                "department": monitor.get_department_display(),
-                "monitor_id": str(monitor.id),
-                "monitor_name": monitor.full_name,
+
+class MyMonitorRecordsAPIView(views.APIView):
+    """Detalle de registros exclusivo del monitor autenticado."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        monitor = request.user.monitor_profile
+        if monitor is None:
+            raise NotFound("El usuario autenticado no tiene un perfil de monitor asociado.")
+        context = {"request": request}
+        return response.Response({
+            "monitor": {
+                "id": str(monitor.id),
+                "full_name": monitor.full_name,
                 "codigo_estudiante": monitor.codigo_estudiante,
-                "normal_hours": row["normal_hours"],
-                "approved_overtime_hours": row["approved_overtime_hours"],
-                "pending_overtime_hours": row["pending_overtime_hours"],
-                "annotation_hours": row["annotation_hours"],
-                "total_hours": row["total_hours"],
-                "remaining_hours": row["remaining_hours"],
-            }
-            for row in rows
-            for monitor in [row["monitor"]]
-        ])
+                "numero_documento": monitor.numero_documento,
+                "proyecto_curricular": monitor.proyecto_curricular,
+                "proyecto_curricular_label": monitor.get_proyecto_curricular_display(),
+                "telefono": monitor.telefono,
+                "semester": monitor.semester.name if monitor.semester_id else None,
+                "semester_is_active": monitor.semester.is_active if monitor.semester_id else None,
+                "department": monitor.department,
+                "is_active": monitor.is_active,
+            },
+            "sessions": WorkSessionSerializer(
+                WorkSession.objects.filter(monitor=monitor).select_related("monitor", "schedule", "raw_record"),
+                many=True, context=context,
+            ).data,
+            "schedules": ScheduleSerializer(
+                Schedule.objects.filter(monitor=monitor), many=True, context=context,
+            ).data,
+            "annotations": AnnotationSerializer(
+                visible_annotations_for_user(request.user).filter(monitor=monitor),
+                many=True, context=context,
+            ).data,
+            "inconsistencies": AttendanceInconsistencySerializer(
+                AttendanceInconsistency.objects.filter(monitor=monitor).select_related("monitor", "raw_record"),
+                many=True, context=context,
+            ).data,
+            "memorandums": [
+                {
+                    "id": str(memorandum.id),
+                    "late_count_threshold": memorandum.late_count_threshold,
+                    "sent_at": memorandum.sent_at,
+                    "created_at": memorandum.created_at,
+                }
+                for memorandum in MonitorMemorandum.objects.filter(monitor=monitor)
+            ],        })
+
+class MonitorRecordsDetailAPIView(views.APIView):
+    """Detalle integral de registros de un monitor actual o histórico visible."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, monitor_id):
+        monitor = get_object_or_404(visible_monitors_for_user(request.user), pk=monitor_id)
+        context = {"request": request}
+        return response.Response({
+            "sessions": WorkSessionSerializer(
+                WorkSession.objects.filter(monitor=monitor).select_related("monitor", "schedule", "raw_record"),
+                many=True, context=context,
+            ).data,
+            "schedules": ScheduleSerializer(
+                Schedule.objects.filter(monitor=monitor), many=True, context=context,
+            ).data,
+            "annotations": AnnotationSerializer(
+                visible_annotations_for_user(request.user).filter(monitor=monitor),
+                many=True, context=context,
+            ).data,
+            "inconsistencies": AttendanceInconsistencySerializer(
+                AttendanceInconsistency.objects.filter(monitor=monitor).select_related("monitor", "raw_record"),
+                many=True, context=context,
+            ).data,
+        })

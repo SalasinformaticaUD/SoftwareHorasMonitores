@@ -65,7 +65,17 @@ def test_inconsistency_list_and_stats_respect_department_scope(api_client):
     assert listing.status_code == 200
     assert [item["id"] for item in listing.data] == [str(visible.id)]
     assert stats.status_code == 200
-    assert stats.data == {"pending_reconciliation": 1, "marking_errors": 1}
+    assert stats.data == {
+        "pending_reconciliation": 1,
+        "marking_errors": 1,
+        "pending_by_type": {
+            "duplicate_mark": 0,
+            "end_of_day": 1,
+            "odd_mark": 0,
+            "out_of_day_window": 0,
+            "short_pair": 0,
+        },
+    }
 
 
 def test_inconsistency_detail_contains_nearby_schedules_marks_relations_and_events(api_client):

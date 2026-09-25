@@ -7,6 +7,19 @@ class WorkSessionSerializer(serializers.ModelSerializer):
     monitor_name = serializers.CharField(source="monitor.full_name", read_only=True)
     lateness_exception_name = serializers.CharField(source="lateness_exception.name", read_only=True)
     overtime_exception_name = serializers.CharField(source="overtime_exception.name", read_only=True)
+    overtime_reviewed_by_name = serializers.SerializerMethodField()
+    overtime_rejection_penalized = serializers.SerializerMethodField()
+
+    def get_overtime_reviewed_by_name(self, obj):
+        reviewer = obj.overtime_reviewed_by
+        if reviewer is None:
+            return ""
+        return reviewer.get_full_name().strip() or reviewer.username
+
+    def get_overtime_rejection_penalized(self, obj):
+        if obj.overtime_status != "rejected":
+            return False
+        return obj.annotations.filter(action="deduct", delta_minutes=-obj.overtime_minutes).exists()
 
     class Meta:
         model = WorkSession
@@ -35,6 +48,9 @@ class WorkSessionSerializer(serializers.ModelSerializer):
             "overtime_exception",
             "overtime_exception_name",
             "overtime_review_note",
+            "overtime_reviewed_by_name",
+            "overtime_reviewed_at",
+            "overtime_rejection_penalized",
             "invalidated_by",
             "invalidated_at",
             "invalidation_reason",

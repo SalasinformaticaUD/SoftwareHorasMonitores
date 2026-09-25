@@ -19,7 +19,7 @@ def test_local_session_authenticates_a_monitores_profile(api_client):
 def test_local_session_rejects_anonymous_user(api_client):
     response = api_client.get("/api/v1/auth/me/")
 
-    assert response.status_code == 403
+    assert response.status_code == 401
 
 
 @pytest.mark.django_db

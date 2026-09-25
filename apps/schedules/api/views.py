@@ -28,7 +28,7 @@ class ScheduleViewSet(viewsets.ModelViewSet):
         monitor = serializer.validated_data["monitor"]
         if self.request.user.role != UserRoleChoices.ADMIN and monitor.department != self.request.user.department:
             raise PermissionDenied("No puedes crear horarios para otra dependencia.")
-        serializer.save()
+        serializer.save(is_active=True)
 
     def perform_update(self, serializer):
         monitor = serializer.instance.monitor
@@ -81,6 +81,18 @@ class ScheduleExceptionViewSet(viewsets.ModelViewSet):
             data["monitors"] = instance.monitors.all()
         if "schedules" not in data and instance is not None:
             data["schedules"] = instance.schedules.all()
+        if instance is None:
+            # Los campos opcionales del modelo pueden no aparecer en
+            # validated_data. El servicio requiere valores explícitos para
+            # aplicar sus validaciones de alcance en vez de producir TypeError.
+            data.setdefault("description", "")
+            data.setdefault("monitors", [])
+            data.setdefault("schedules", [])
+            data.setdefault("all_semester", False)
+            data.setdefault("department", None)
+            data.setdefault("ignore_lateness", True)
+            data.setdefault("approve_overtime", False)
+            data["is_active"] = True
         return data
 
     def perform_create(self, serializer):

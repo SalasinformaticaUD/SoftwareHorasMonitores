@@ -100,3 +100,32 @@ class MonitorProvisionDuplicateTests(APITestCase):
         self.assertEqual(segunda.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("número de documento", str(segunda.data).lower())
         self.assertEqual(Monitor.objects.filter(semester=self.semester).count(), 1)
+
+
+class MonitorPaginationTests(APITestCase):
+    def setUp(self):
+        self.semester = AcademicSemester.objects.filter(is_active=True).first() or AcademicSemester.objects.create(
+            name="2026-3", is_active=True, starts_on="2026-08-01", ends_on="2026-12-15"
+        )
+        self.admin = User.objects.create_user(
+            username="admin-pagination", email="admin-pagination@example.test", password="password",
+            role=UserRoleChoices.ADMIN,
+        )
+        for index in range(2):
+            user = User.objects.create_user(
+                username=f"monitor-pagination-{index}", email=f"monitor-pagination-{index}@example.test",
+                password="password", role=UserRoleChoices.MONITOR,
+                department=DepartmentChoices.INFORMATICS_LABS,
+            )
+            Monitor.objects.create(
+                semester=self.semester, user=user, codigo_estudiante=f"2026001{index}",
+                full_name=f"Monitor Paginado {index}", department=DepartmentChoices.INFORMATICS_LABS,
+            )
+        self.client.force_authenticate(self.admin)
+
+    def test_lista_paginada_conserva_el_total(self):
+        respuesta = self.client.get("/api/v1/monitors/?page=1&page_size=1")
+
+        self.assertEqual(respuesta.status_code, status.HTTP_200_OK)
+        self.assertEqual(respuesta.data["count"], 2)
+        self.assertEqual(len(respuesta.data["results"]), 1)

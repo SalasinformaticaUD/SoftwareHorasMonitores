@@ -88,6 +88,10 @@ USE_TZ = True
 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
+SIGNED_COMMITMENT_ACTS_FOLDER = env(
+    "SIGNED_COMMITMENT_ACTS_FOLDER",
+    default="actas_compromiso_firmadas",
+)
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 AUTH_USER_MODEL = "users.User"

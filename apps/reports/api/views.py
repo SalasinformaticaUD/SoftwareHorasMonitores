@@ -9,6 +9,7 @@ from rest_framework import decorators, permissions, response, status, views, vie
 from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 
 from apps.common.permissions import IsAdminOrLeader
+from apps.common.pagination import OptionalPageNumberPagination
 from apps.common.choices import CommitmentActStatusChoices, NotificationEventChoices, SessionStateChoices, UserRoleChoices
 from apps.common.throttling import PublicMonitorLookupThrottle
 from apps.monitors.models import AcademicSemester
@@ -199,11 +200,12 @@ class PublicMonitorLookupAPIView(views.APIView):
 class MemorandumViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = MonitorMemorandumSerializer
     permission_classes = [IsAdminOrLeader]
+    pagination_class = OptionalPageNumberPagination
 
     def get_queryset(self):
         return MonitorMemorandum.objects.select_related("monitor", "monitor__user").filter(
             monitor__in=visible_monitors_for_user(self.request.user)
-        )
+        ).order_by("-created_at", "id")
 
     @decorators.action(detail=True, methods=["post"], url_path="resend")
     def resend(self, request, pk=None):

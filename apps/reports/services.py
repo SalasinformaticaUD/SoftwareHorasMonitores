@@ -97,7 +97,7 @@ DEPARTMENT_EXPORT_FILENAMES = {
     DepartmentChoices.PHYSICS: "dashboard_monitores_fisica.xlsx",
     DepartmentChoices.ELECTRICAL: "dashboard_monitores_laboratorios.xlsx",
 }
-SIGNED_COMMITMENT_ACTS_FOLDER = "actas_compromiso_firmadas"
+SIGNED_COMMITMENT_ACTS_FOLDER = settings.SIGNED_COMMITMENT_ACTS_FOLDER
 MEMORANDUM_LATE_THRESHOLD = 3
 
 

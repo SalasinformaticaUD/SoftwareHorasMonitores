@@ -1,8 +1,12 @@
+from hashlib import sha256
+
+from django.core.cache import cache
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import decorators, response, status, viewsets
 from rest_framework.exceptions import PermissionDenied, ValidationError
 
 from apps.common.choices import UserRoleChoices
+from apps.common.pagination import OptionalPageNumberPagination
 from apps.common.permissions import IsAdminOrLeader
 from apps.monitors.selectors import visible_monitors_for_user
 from apps.schedules.selectors import visible_schedule_exceptions_for_user
@@ -19,22 +23,62 @@ class ScheduleViewSet(viewsets.ModelViewSet):
     serializer_class = ScheduleSerializer
     queryset = Schedule.objects.select_related("monitor")
     permission_classes = [IsAdminOrLeader]
+    pagination_class = OptionalPageNumberPagination
+    cache_timeout = 300
+    cache_version_key = "schedules:list:version"
+
+    def _cache_key(self):
+        version = cache.get_or_set(self.cache_version_key, 1)
+        query = self.request.query_params.urlencode()
+        fingerprint = sha256(query.encode("utf-8")).hexdigest()
+        return f"schedules:list:{version}:{self.request.user.pk}:{fingerprint}"
+
+    @classmethod
+    def _invalidate_list_cache(cls):
+        try:
+            cache.incr(cls.cache_version_key)
+        except ValueError:
+            cache.set(cls.cache_version_key, 1)
+
+    def list(self, request, *args, **kwargs):
+        key = self._cache_key()
+        cached = cache.get(key)
+        if cached is not None:
+            return response.Response(cached)
+
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            data = self.get_serializer(page, many=True).data
+            result = self.get_paginated_response(data)
+        else:
+            result = response.Response(self.get_serializer(queryset, many=True).data)
+        cache.set(key, result.data, self.cache_timeout)
+        return result
 
     def get_queryset(self):
         monitors = visible_monitors_for_user(self.request.user)
-        return self.queryset.filter(monitor__in=monitors)
+        return self.queryset.filter(monitor__in=monitors).order_by(
+            "monitor__full_name", "weekday", "start_time", "id"
+        )
 
     def perform_create(self, serializer):
         monitor = serializer.validated_data["monitor"]
         if self.request.user.role != UserRoleChoices.ADMIN and monitor.department != self.request.user.department:
             raise PermissionDenied("No puedes crear horarios para otra dependencia.")
         serializer.save(is_active=True)
+        self._invalidate_list_cache()
 
     def perform_update(self, serializer):
         monitor = serializer.instance.monitor
         if self.request.user.role != UserRoleChoices.ADMIN and monitor.department != self.request.user.department:
             raise PermissionDenied("No puedes editar horarios de otra dependencia.")
         serializer.save()
+        self._invalidate_list_cache()
+
+    def perform_destroy(self, instance):
+        instance.delete()
+        self._invalidate_list_cache()
 
     @decorators.action(detail=False, methods=["post"], url_path="import")
     def import_workbook(self, request):
@@ -48,6 +92,7 @@ class ScheduleViewSet(viewsets.ModelViewSet):
             )
         except DjangoValidationError as exc:
             raise ValidationError(exc.messages) from exc
+        self._invalidate_list_cache()
         return response.Response(
             {
                 "total_rows": result.total_rows,

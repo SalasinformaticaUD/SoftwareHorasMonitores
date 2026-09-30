@@ -3,6 +3,7 @@ from django.db.models.deletion import ProtectedError
 from rest_framework import decorators, exceptions, permissions, response, status, viewsets
 
 from apps.common.choices import UserRoleChoices
+from apps.common.pagination import OptionalPageNumberPagination
 from apps.common.permissions import IsAdminOrLeader
 from apps.monitors.api.serializers import MonitorSerializer, PlatformMonitorProvisionSerializer, SemesterResetSerializer
 from apps.monitors.models import Monitor
@@ -21,9 +22,10 @@ class MonitorViewSet(viewsets.ModelViewSet):
     serializer_class = MonitorSerializer
     queryset = Monitor.objects.all()
     permission_classes = [IsAdminOrLeader]
+    pagination_class = OptionalPageNumberPagination
 
     def get_queryset(self):
-        return visible_monitors_for_user(self.request.user)
+        return visible_monitors_for_user(self.request.user).order_by("full_name", "id")
 
     def get_permissions(self):
         return [permission() for permission in self.permission_classes]

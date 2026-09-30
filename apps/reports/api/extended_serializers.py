@@ -6,11 +6,12 @@ from apps.reports.models import MonitorMemorandum
 class MonitorMemorandumSerializer(serializers.ModelSerializer):
     monitor_name = serializers.CharField(source="monitor.full_name", read_only=True)
     codigo_estudiante = serializers.CharField(source="monitor.codigo_estudiante", read_only=True)
+    department = serializers.CharField(source="monitor.department", read_only=True)
     pdf_url = serializers.SerializerMethodField()
 
     class Meta:
         model = MonitorMemorandum
-        fields = ("id", "monitor", "monitor_name", "codigo_estudiante", "late_count_threshold", "sent_to", "sent_at", "pdf_url", "created_at")
+        fields = ("id", "monitor", "monitor_name", "codigo_estudiante", "department", "late_count_threshold", "sent_to", "sent_at", "pdf_url", "created_at")
 
     def get_pdf_url(self, obj):
         if not obj.pdf_file:

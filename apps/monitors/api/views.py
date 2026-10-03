@@ -7,6 +7,7 @@ from apps.common.pagination import OptionalPageNumberPagination
 from apps.common.permissions import IsAdminOrLeader
 from apps.monitors.api.serializers import MonitorSerializer, PlatformMonitorProvisionSerializer, SemesterResetSerializer
 from apps.monitors.models import Monitor
+from apps.monitors.platform_client import verify_platform_admin_password
 from apps.monitors.selectors import visible_monitors_for_user
 from apps.monitors.services import (
     create_monitor_with_user,
@@ -110,13 +111,26 @@ class MonitorViewSet(viewsets.ModelViewSet):
     @decorators.action(detail=False, methods=["get", "post"], url_path="new-semester")
     def new_semester(self, request):
         if request.user.role != UserRoleChoices.ADMIN:
-            raise permissions.PermissionDenied("Solo el administrador puede iniciar un semestre nuevo.")
+            raise exceptions.PermissionDenied("Solo el administrador puede iniciar un semestre nuevo.")
         if request.method == "GET":
             return response.Response({"preview": semester_reset_preview_counts()})
 
         serializer = SemesterResetSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
+        try:
+            password_valid = (
+                verify_platform_admin_password(
+                    authorization=request.headers.get("Authorization", ""),
+                    password=data["password"],
+                )
+                if request.user.usuario_externo_id
+                else request.user.check_password(data["password"])
+            )
+        except DjangoValidationError as exc:
+            raise exceptions.ValidationError(exc.messages) from exc
+        if not password_valid:
+            raise exceptions.ValidationError({"password": ["La contraseña no coincide."]})
         try:
             result = reset_semester_data(
                 new_semester_name=data["new_semester_name"].strip(),

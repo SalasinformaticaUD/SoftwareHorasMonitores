@@ -5,6 +5,7 @@ from apps.work_sessions.models import WorkSession
 
 class WorkSessionSerializer(serializers.ModelSerializer):
     monitor_name = serializers.CharField(source="monitor.full_name", read_only=True)
+    semester = serializers.CharField(source="monitor.semester.name", read_only=True)
     lateness_exception_name = serializers.CharField(source="lateness_exception.name", read_only=True)
     overtime_exception_name = serializers.CharField(source="overtime_exception.name", read_only=True)
     overtime_reviewed_by_name = serializers.SerializerMethodField()
@@ -27,6 +28,7 @@ class WorkSessionSerializer(serializers.ModelSerializer):
             "id",
             "monitor",
             "monitor_name",
+            "semester",
             "work_day",
             "actual_start",
             "actual_end",

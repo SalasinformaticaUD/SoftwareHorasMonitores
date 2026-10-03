@@ -3,6 +3,7 @@ from pathlib import Path
 
 from django.conf import settings
 from django.http import FileResponse
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import decorators, permissions, response, status, views, viewsets
@@ -203,9 +204,36 @@ class MemorandumViewSet(viewsets.ReadOnlyModelViewSet):
     pagination_class = OptionalPageNumberPagination
 
     def get_queryset(self):
-        return MonitorMemorandum.objects.select_related("monitor", "monitor__user").filter(
+        queryset = MonitorMemorandum.objects.select_related("monitor", "monitor__user", "monitor__semester").filter(
             monitor__in=visible_monitors_for_user(self.request.user)
-        ).order_by("-created_at", "id")
+        )
+        # Los PDF y el reenvío siguen disponibles para memorandos archivados.
+        if self.action == "list":
+            if self.request.query_params.get("scope") == "historical":
+                queryset = queryset.filter(Q(monitor__semester__is_active=False) | Q(monitor__semester__isnull=True))
+                semester = self.request.query_params.get("semester", "").strip()
+                if semester == "__unassigned__":
+                    queryset = queryset.filter(monitor__semester__isnull=True)
+                elif semester:
+                    queryset = queryset.filter(monitor__semester__name=semester)
+            else:
+                queryset = queryset.filter(monitor__semester__is_active=True)
+        return queryset.order_by("-created_at", "id")
+
+    @decorators.action(detail=False, methods=["get"], url_path="semesters")
+    def semesters(self, request):
+        historical = MonitorMemorandum.objects.filter(
+            monitor__in=visible_monitors_for_user(request.user),
+        ).filter(Q(monitor__semester__is_active=False) | Q(monitor__semester__isnull=True))
+        # El orden por defecto de MonitorMemorandum agrega created_at al SELECT;
+        # eso hace que DISTINCT repita el mismo semestre por cada memorando.
+        names = historical.exclude(monitor__semester__isnull=True).order_by(
+            "monitor__semester__name"
+        ).values_list("monitor__semester__name", flat=True).distinct()
+        options = sorted(names, reverse=True)
+        if historical.filter(monitor__semester__isnull=True).exists():
+            options.append("__unassigned__")
+        return response.Response(options)
 
     @decorators.action(detail=True, methods=["post"], url_path="resend")
     def resend(self, request, pk=None):
@@ -442,11 +470,30 @@ class MyMonitorRecordsAPIView(views.APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
-        monitor = request.user.monitor_profile
+        monitorings = request.user.monitor_profiles.select_related("semester").order_by(
+            "-semester__is_active", "-semester__starts_on", "-created_at"
+        )
+        if not monitorings.exists():
+            raise NotFound("El usuario autenticado no tiene un perfil de monitor asociado.")
+        requested_monitor_id = request.query_params.get("monitor_id")
+        if requested_monitor_id:
+            monitor = get_object_or_404(monitorings, pk=requested_monitor_id)
+        else:
+            monitor = request.user.monitor_profile
         if monitor is None:
             raise NotFound("El usuario autenticado no tiene un perfil de monitor asociado.")
         context = {"request": request}
         return response.Response({
+            "monitorings": [
+                {
+                    "id": str(item.id),
+                    "semester": item.semester.name if item.semester_id else None,
+                    "semester_is_active": item.semester.is_active if item.semester_id else None,
+                    "is_active": item.is_active,
+                    "department": item.department,
+                }
+                for item in monitorings
+            ],
             "monitor": {
                 "id": str(monitor.id),
                 "full_name": monitor.full_name,
@@ -468,7 +515,7 @@ class MyMonitorRecordsAPIView(views.APIView):
                 Schedule.objects.filter(monitor=monitor), many=True, context=context,
             ).data,
             "annotations": AnnotationSerializer(
-                visible_annotations_for_user(request.user).filter(monitor=monitor),
+                Annotation.objects.filter(monitor=monitor).select_related("leader", "monitor", "session"),
                 many=True, context=context,
             ).data,
             "inconsistencies": AttendanceInconsistencySerializer(

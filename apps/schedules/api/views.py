@@ -8,6 +8,7 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 from apps.common.choices import UserRoleChoices
 from apps.common.pagination import OptionalPageNumberPagination
 from apps.common.permissions import IsAdminOrLeader
+from apps.monitors.models import AcademicSemester
 from apps.monitors.selectors import visible_monitors_for_user
 from apps.schedules.selectors import visible_schedule_exceptions_for_user
 from apps.schedules.api.serializers import ScheduleExceptionSerializer, ScheduleSerializer
@@ -111,6 +112,22 @@ class ScheduleExceptionViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return visible_schedule_exceptions_for_user(self.request.user)
+
+    @decorators.action(detail=False, methods=["get"], url_path="active-semester")
+    def active_semester(self, request):
+        semester = AcademicSemester.objects.filter(is_active=True).first()
+        if semester is None:
+            return response.Response(
+                {"detail": "No hay un semestre académico activo."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return response.Response(
+            {
+                "name": semester.name,
+                "starts_on": semester.starts_on,
+                "ends_on": semester.ends_on,
+            }
+        )
 
     @staticmethod
     def _service_data(serializer):

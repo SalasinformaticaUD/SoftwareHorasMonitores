@@ -102,6 +102,14 @@ class ScheduleWorkbookAndExceptionTests(APITestCase):
         self.assertEqual(list(exception.monitors.all()), [self.monitor])
         self.assertEqual(list(exception.schedules.all()), [horario])
 
+    def test_consulta_fechas_del_semestre_activo(self):
+        respuesta = self.client.get("/api/v1/schedules/exceptions/active-semester/")
+
+        self.assertEqual(respuesta.status_code, status.HTTP_200_OK)
+        self.assertEqual(respuesta.data["name"], self.semester.name)
+        self.assertEqual(respuesta.data["starts_on"], date(2026, 8, 1))
+        self.assertEqual(respuesta.data["ends_on"], date(2026, 12, 15))
+
     def test_lider_no_puede_crear_excepcion_para_otra_dependencia(self):
         horario = Schedule.objects.create(
             monitor=self.monitor, weekday=Schedule.Weekday.TUESDAY, start_time="08:00", end_time="10:00",

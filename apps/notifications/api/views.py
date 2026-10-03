@@ -4,6 +4,7 @@ from apps.common.choices import UserRoleChoices
 from apps.notifications.api.serializers import NotificationSerializer
 from apps.notifications.selectors import visible_notifications_for_user
 from apps.notifications.services import mark_notification_as_read
+from apps.notifications.models import NotificationDismissal
 
 
 class CanReadOwnNotifications(permissions.BasePermission):
@@ -35,3 +36,9 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
         notification = self.get_object()
         mark_notification_as_read(notification)
         return response.Response(NotificationSerializer(notification).data, status=status.HTTP_200_OK)
+
+    @decorators.action(detail=True, methods=["post"], url_path="dismiss")
+    def dismiss(self, request, pk=None):
+        notification = self.get_object()
+        NotificationDismissal.objects.get_or_create(notification=notification, user=request.user)
+        return response.Response(status=status.HTTP_204_NO_CONTENT)

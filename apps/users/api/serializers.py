@@ -13,12 +13,40 @@ class LoginSerializer(serializers.Serializer):
 
     def validate(self, attrs):
         from django.contrib.auth import authenticate
+        from apps.monitors.models import Monitor
 
-        user = authenticate(
-            request=self.context.get("request"),
-            username=attrs["username"],
-            password=attrs["password"],
+        identifier = attrs["username"].strip()
+        monitor = (
+            Monitor.objects.select_related("user")
+            .filter(
+                codigo_estudiante__iexact=identifier,
+                is_active=True,
+                semester__is_active=True,
+                user__is_active=True,
+            )
+            .first()
         )
+        if monitor is not None:
+            login_username = monitor.user.username
+        else:
+            administrative_user = (
+                User.objects.filter(
+                    username__iexact=identifier,
+                    role__in=[UserRoleChoices.ADMIN, UserRoleChoices.LEADER],
+                    is_active=True,
+                )
+                .only("username")
+                .first()
+            )
+            login_username = administrative_user.username if administrative_user else None
+
+        user = None
+        if login_username:
+            user = authenticate(
+                request=self.context.get("request"),
+                username=login_username,
+                password=attrs["password"],
+            )
         if not user or not user.is_active:
             raise serializers.ValidationError("Credenciales inválidas.")
         attrs["user"] = user

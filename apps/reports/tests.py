@@ -7,6 +7,7 @@ from apps.annotations.models import Annotation
 from apps.monitors.models import AcademicSemester, Monitor
 from apps.reports.models import CommitmentActSubmission
 from apps.notifications.models import Notification
+from apps.schedules.models import Schedule
 from apps.users.models import User
 
 
@@ -145,7 +146,57 @@ class MyMonitorRecordsApiTests(APITestCase):
         self.assertEqual(respuesta.data["monitor"]["department"], self.monitor.department)
         self.assertIn("semester", respuesta.data["monitor"])
         self.assertIn("proyecto_curricular_label", respuesta.data["monitor"])
-        self.assertEqual(set(respuesta.data), {"monitor", "sessions", "schedules", "annotations", "inconsistencies", "memorandums"})
+        self.assertEqual(set(respuesta.data), {"monitorings", "monitor", "sessions", "schedules", "annotations", "inconsistencies", "memorandums"})
+        self.assertEqual(respuesta.data["monitorings"][0]["id"], str(self.monitor.id))
+
+    def test_monitor_repitente_puede_consultar_una_monitoria_anterior(self):
+        previous_semester = AcademicSemester.objects.create(
+            name="test-monitor-history-2026-1", is_active=False, starts_on="2026-02-01", ends_on="2026-06-15"
+        )
+        previous_monitor = Monitor.objects.create(
+            semester=previous_semester,
+            user=self.user,
+            codigo_estudiante=self.monitor.codigo_estudiante,
+            full_name=self.monitor.full_name,
+            department=self.monitor.department,
+            is_active=False,
+        )
+        schedule = Schedule.objects.create(
+            monitor=previous_monitor,
+            weekday=Schedule.Weekday.MONDAY,
+            start_time="08:00",
+            end_time="10:00",
+            location="Laboratorio histórico",
+            is_active=False,
+        )
+        admin = User.objects.create_user(
+            username="admin-historial-propio",
+            email="admin-historial-propio@example.test",
+            password="password",
+            role=UserRoleChoices.ADMIN,
+        )
+        annotation = Annotation.objects.create(
+            leader=admin,
+            monitor=previous_monitor,
+            annotation_type=AnnotationTypeChoices.NOVELTY,
+            action=AnnotationActionChoices.NOTE,
+            delta_minutes=0,
+            occurred_on="2026-03-10",
+            description="Novedad del semestre anterior",
+            department=previous_monitor.department,
+        )
+
+        self.client.force_authenticate(self.user)
+        respuesta = self.client.get(
+            "/api/v1/reports/monitor-records/me/",
+            {"monitor_id": str(previous_monitor.id)},
+        )
+
+        self.assertEqual(respuesta.status_code, status.HTTP_200_OK)
+        self.assertEqual(respuesta.data["monitor"]["id"], str(previous_monitor.id))
+        self.assertEqual(len(respuesta.data["monitorings"]), 2)
+        self.assertEqual(respuesta.data["schedules"][0]["id"], str(schedule.id))
+        self.assertEqual(respuesta.data["annotations"][0]["id"], str(annotation.id))
 
     def test_anotaciones_de_registros_coinciden_con_mis_anotaciones(self):
         admin = User.objects.create_user(

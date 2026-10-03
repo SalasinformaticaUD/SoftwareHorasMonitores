@@ -44,3 +44,28 @@ def provision_platform_user(*, full_name: str, username: str, email: str) -> UUI
         return UUID(payload["id"])
     except (KeyError, TypeError, ValueError) as exc:
         raise ValidationError("Gestión de Aulas devolvió una identidad inválida.") from exc
+
+
+def verify_platform_admin_password(*, authorization: str, password: str) -> bool:
+    """Confirma la clave del administrador central sin almacenar ni registrar su valor."""
+    base_url = settings.PLATFORM_API_URL.rstrip("/")
+    if not base_url or not authorization.lower().startswith("bearer "):
+        raise ValidationError("No fue posible verificar la contraseña con Gestión de Aulas.")
+    request = Request(
+        f"{base_url}/auth/verificar-contrasena",
+        data=json.dumps({"password": password}).encode("utf-8"),
+        headers={
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "Authorization": authorization,
+        },
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=settings.PLATFORM_API_TIMEOUT_SECONDS) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as exc:
+        raise ValidationError("No fue posible verificar la contraseña con Gestión de Aulas.") from exc
+    if not isinstance(payload, dict) or not isinstance(payload.get("valido"), bool):
+        raise ValidationError("Gestión de Aulas devolvió una verificación de contraseña inválida.")
+    return payload["valido"]

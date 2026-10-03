@@ -76,6 +76,7 @@ class SemesterResetSerializer(serializers.Serializer):
     new_semester_name = serializers.CharField(max_length=20)
     starts_on = serializers.DateField()
     ends_on = serializers.DateField()
+    password = serializers.CharField(write_only=True, trim_whitespace=False, allow_blank=False)
     confirm = serializers.BooleanField()
 
     def validate(self, attrs):

@@ -26,3 +26,13 @@ class Notification(BaseModel):
     def __str__(self) -> str:
         return self.title
 
+
+class NotificationDismissal(BaseModel):
+    """Oculta una notificación para un usuario sin eliminarla para los demás."""
+
+    notification = models.ForeignKey(Notification, on_delete=models.CASCADE, related_name="dismissals")
+    user = models.ForeignKey("users.User", on_delete=models.CASCADE, related_name="dismissed_notifications")
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=("notification", "user"), name="notifications_unique_dismissal")]
+

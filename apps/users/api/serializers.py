@@ -1,4 +1,9 @@
 from django.contrib.auth import get_user_model
+from django.contrib.auth.password_validation import validate_password
+from django.contrib.auth.tokens import default_token_generator
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.utils.encoding import force_str
+from django.utils.http import urlsafe_base64_decode
 from rest_framework import serializers
 
 from apps.common.choices import DepartmentChoices, UserRoleChoices
@@ -20,10 +25,9 @@ class LoginSerializer(serializers.Serializer):
             Monitor.objects.select_related("user")
             .filter(
                 codigo_estudiante__iexact=identifier,
-                is_active=True,
-                semester__is_active=True,
                 user__is_active=True,
             )
+            .order_by("-is_active", "-semester__is_active", "-created_at")
             .first()
         )
         if monitor is not None:
@@ -54,9 +58,16 @@ class LoginSerializer(serializers.Serializer):
 
 
 class UserSerializer(serializers.ModelSerializer):
+    monitor_is_current = serializers.SerializerMethodField()
+
     class Meta:
         model = User
-        fields = ("id", "usuario_externo_id", "username", "email", "first_name", "last_name", "role", "department")
+        fields = ("id", "usuario_externo_id", "username", "email", "first_name", "last_name", "role", "department", "monitor_is_current")
+
+    def get_monitor_is_current(self, obj):
+        if obj.role != UserRoleChoices.MONITOR:
+            return None
+        return obj.monitor_profiles.filter(is_active=True, semester__is_active=True).exists()
 
 
 class ManagedUserSerializer(UserSerializer):
@@ -117,3 +128,28 @@ class ManagedUserCreateSerializer(ManagedUserWriteSerializer):
 
 class PasswordResetSerializer(serializers.Serializer):
     password = serializers.CharField(write_only=True, min_length=10, max_length=128)
+
+
+class MonitorPasswordRecoveryRequestSerializer(serializers.Serializer):
+    codigo_estudiante = serializers.RegexField(r"^\d+$", max_length=20)
+
+
+class MonitorPasswordRecoveryConfirmSerializer(serializers.Serializer):
+    uid = serializers.CharField(write_only=True)
+    token = serializers.CharField(write_only=True)
+    nueva_contrasena = serializers.CharField(write_only=True, min_length=10, max_length=128, trim_whitespace=False)
+
+    def validate(self, attrs):
+        try:
+            user_id = force_str(urlsafe_base64_decode(attrs["uid"]))
+            user = User.objects.get(pk=user_id, is_active=True, role=UserRoleChoices.MONITOR)
+        except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+            raise serializers.ValidationError({"token": "El enlace de recuperación no es válido o ya venció."})
+        if user.usuario_externo_id or not default_token_generator.check_token(user, attrs["token"]):
+            raise serializers.ValidationError({"token": "El enlace de recuperación no es válido o ya venció."})
+        try:
+            validate_password(attrs["nueva_contrasena"], user=user)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError({"nueva_contrasena": list(exc.messages)}) from exc
+        attrs["user"] = user
+        return attrs

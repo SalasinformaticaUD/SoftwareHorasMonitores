@@ -59,19 +59,25 @@ class PlatformUserSyncAPIView(APIView):
                 user.is_active = False
                 user.save(update_fields=['is_active', 'updated_at'])
             return Response({'synchronized': True, 'active': False})
-        # Una cuenta de Monitores creada antes de la integración puede tener
-        # exactamente el mismo usuario y correo de la cuenta central. En ese
-        # caso se enlaza para conservar sus registros y permitir el traspaso
-        # de sesión. No se enlazan coincidencias parciales ni cuentas ya
-        # asociadas a otra identidad central.
+        # Una cuenta creada antes de la integración puede conservar un nombre
+        # de usuario o correo distinto en una de las dos bases. Si solo existe
+        # una coincidencia por cualquiera de esos identificadores, se adopta
+        # esa cuenta y se actualizan ambos valores, incluido un UUID central
+        # obsoleto. Dos coincidencias distintas siguen siendo ambiguas y
+        # requieren corrección manual.
         if user is None:
-            user = User.objects.filter(
-                username__iexact=data['username'],
-                email__iexact=data['email'],
-                usuario_externo_id__isnull=True,
-            ).first()
+            candidates = list(User.objects.filter(
+                Q(username__iexact=data['username']) | Q(email__iexact=data['email']),
+            )[:2])
+            if len(candidates) > 1:
+                raise serializers.ValidationError(
+                    'El usuario y el correo coinciden con cuentas locales diferentes.'
+                )
+            user = candidates[0] if candidates else None
 
-        conflicts = User.objects.filter(Q(username=data['username']) | Q(email=data['email']))
+        conflicts = User.objects.filter(
+            Q(username__iexact=data['username']) | Q(email__iexact=data['email'])
+        )
         if user is not None:
             conflicts = conflicts.exclude(pk=user.pk)
         if conflicts.exists():

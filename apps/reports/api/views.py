@@ -116,15 +116,38 @@ class MyMonitorDashboardAPIView(views.APIView):
         monitor = request.user.monitor_profile
         if monitor is None:
             raise NotFound("El usuario autenticado no tiene un perfil de monitor asociado.")
+        monitorings = request.user.monitor_profiles.select_related("semester").order_by(
+            "-semester__is_active", "-semester__starts_on", "-created_at"
+        )
+        requested_monitor_id = request.query_params.get("monitor_id")
+        schedule_monitor = (
+            get_object_or_404(monitorings, pk=requested_monitor_id)
+            if requested_monitor_id
+            else monitor
+        )
         context = {"request": request}
-        schedules = Schedule.objects.filter(monitor=monitor, is_active=True).order_by("weekday", "start_time")
+        schedules = Schedule.objects.filter(monitor=schedule_monitor)
+        if schedule_monitor.is_active and schedule_monitor.semester_id and schedule_monitor.semester.is_active:
+            schedules = schedules.filter(is_active=True)
+        schedules = schedules.order_by("weekday", "start_time")
         annotations = visible_annotations_for_user(request.user).filter(monitor=monitor).order_by("-occurred_on", "-created_at")[:5]
         sessions = WorkSession.objects.filter(monitor=monitor).select_related("monitor", "schedule", "raw_record").order_by("-work_day", "-created_at")[:5]
         late_count = WorkSession.objects.filter(
-            monitor=monitor, late_minutes__gt=0, lateness_excused=False
+            monitor=monitor, is_late=True, lateness_excused=False
         ).exclude(session_state=SessionStateChoices.INVALID).count()
         return response.Response({
             "monitor": {"id": str(monitor.id), "full_name": monitor.full_name, "codigo_estudiante": monitor.codigo_estudiante},
+            "monitorings": [
+                {
+                    "id": str(item.id),
+                    "semester": item.semester.name if item.semester_id else None,
+                    "semester_is_active": item.semester.is_active if item.semester_id else None,
+                    "is_active": item.is_active,
+                    "department": item.department,
+                }
+                for item in monitorings
+            ],
+            "schedule_monitoring_id": str(schedule_monitor.id),
             "schedules": ScheduleSerializer(schedules, many=True, context=context).data,
             "recent_sessions": WorkSessionSerializer(sessions, many=True, context=context).data,
             "recent_annotations": AnnotationSerializer(annotations, many=True, context=context).data,
@@ -483,6 +506,9 @@ class MyMonitorRecordsAPIView(views.APIView):
         if monitor is None:
             raise NotFound("El usuario autenticado no tiene un perfil de monitor asociado.")
         context = {"request": request}
+        schedules = Schedule.objects.filter(monitor=monitor)
+        if monitor.is_active and monitor.semester_id and monitor.semester.is_active:
+            schedules = schedules.filter(is_active=True)
         return response.Response({
             "monitorings": [
                 {
@@ -512,7 +538,7 @@ class MyMonitorRecordsAPIView(views.APIView):
                 many=True, context=context,
             ).data,
             "schedules": ScheduleSerializer(
-                Schedule.objects.filter(monitor=monitor), many=True, context=context,
+                schedules.order_by("weekday", "start_time"), many=True, context=context,
             ).data,
             "annotations": AnnotationSerializer(
                 Annotation.objects.filter(monitor=monitor).select_related("leader", "monitor", "session"),

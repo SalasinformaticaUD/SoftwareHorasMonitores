@@ -7,11 +7,15 @@ from apps.users.api.views import (
     ManagedUserListCreateAPIView,
     ManagedUserPasswordAPIView,
     MeAPIView,
+    MonitorPasswordRecoveryConfirmAPIView,
+    MonitorPasswordRecoveryRequestAPIView,
     VerifyPasswordAPIView,
 )
 
 urlpatterns = [
     path("login/", LoginAPIView.as_view(), name="api-login"),
+    path("password-recovery/request/", MonitorPasswordRecoveryRequestAPIView.as_view(), name="password-recovery-request"),
+    path("password-recovery/confirm/", MonitorPasswordRecoveryConfirmAPIView.as_view(), name="password-recovery-confirm"),
     path("logout/", LogoutAPIView.as_view(), name="api-logout"),
     path("verify-password/", VerifyPasswordAPIView.as_view(), name="api-verify-password"),
     path("me/", MeAPIView.as_view(), name="api-me"),

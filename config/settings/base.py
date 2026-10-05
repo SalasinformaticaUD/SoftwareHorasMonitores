@@ -17,6 +17,7 @@ DEBUG = env("DEBUG")
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost", "127.0.0.1","10.20.150.11","192.168.56.1"])
 CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
 CORS_ALLOWED_ORIGINS = env.list("FRONTEND_URL", default=[])
+FRONTEND_BASE_URL = env("FRONTEND_URL", default="http://localhost:3002").split(",", 1)[0].strip()
 # Solo se usa para el pase temporal de admin desde Aulas; no autentica las
 # peticiones ordinarias de Monitores.
 PLATFORM_JWT_SECRET = env("PLATFORM_JWT_SECRET", default="")
@@ -143,6 +144,7 @@ REST_FRAMEWORK = {
         "anon": "30/hour",
         "user": "500/hour",
         "public_monitor_lookup": "10/hour",
+        "password_recovery": "10/hour",
     },
 }
 

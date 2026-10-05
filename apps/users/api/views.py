@@ -1,8 +1,11 @@
+import logging
+
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from rest_framework import permissions, status
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from apps.common.authentication import LOCAL_MONITORES_TOKEN_MAX_AGE_SECONDS, issue_local_monitor_token
@@ -12,11 +15,15 @@ from apps.users.api.serializers import (
     ManagedUserCreateSerializer,
     ManagedUserSerializer,
     ManagedUserWriteSerializer,
+    MonitorPasswordRecoveryConfirmSerializer,
+    MonitorPasswordRecoveryRequestSerializer,
     PasswordResetSerializer,
     UserSerializer,
 )
+from apps.users.services import send_monitor_password_recovery
 
 User = get_user_model()
+logger = logging.getLogger(__name__)
 
 
 class IsMonitoresAdmin(permissions.BasePermission):
@@ -44,6 +51,48 @@ class LoginAPIView(APIView):
             "expires_in": LOCAL_MONITORES_TOKEN_MAX_AGE_SECONDS,
         })
         return Response(payload)
+
+
+class MonitorPasswordRecoveryRequestAPIView(APIView):
+    permission_classes = [permissions.AllowAny]
+    authentication_classes = []
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "password_recovery"
+
+    def post(self, request):
+        serializer = MonitorPasswordRecoveryRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            email_hint = send_monitor_password_recovery(
+                codigo_estudiante=serializer.validated_data["codigo_estudiante"],
+            )
+        except Exception:
+            logger.exception("No fue posible enviar el correo de recuperación de contraseña.")
+            return Response(
+                {"detail": "No fue posible enviar el correo de recuperación. Inténtalo nuevamente más tarde."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        payload = {
+            "detail": "Si el código corresponde a una cuenta local habilitada con contraseña configurada, enviaremos las instrucciones al correo registrado.",
+        }
+        if email_hint:
+            payload["correo_destino"] = email_hint
+        return Response(payload)
+
+
+class MonitorPasswordRecoveryConfirmAPIView(APIView):
+    permission_classes = [permissions.AllowAny]
+    authentication_classes = []
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "password_recovery"
+
+    def post(self, request):
+        serializer = MonitorPasswordRecoveryConfirmSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.validated_data["user"]
+        user.set_password(serializer.validated_data["nueva_contrasena"])
+        user.save(update_fields=["password", "updated_at"])
+        return Response({"detail": "Contraseña actualizada correctamente."})
 
 
 class LogoutAPIView(APIView):

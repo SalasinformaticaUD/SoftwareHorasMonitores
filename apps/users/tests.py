@@ -143,6 +143,19 @@ class LocalTokenAuthenticationTests(APITestCase):
         self.assertEqual(profile_response.status_code, status.HTTP_200_OK)
         self.assertEqual(profile_response.data["username"], self.monitor.username)
         self.assertEqual(profile_response.data["role"], UserRoleChoices.MONITOR)
+        self.assertTrue(profile_response.data["monitor_is_current"])
+
+    def test_perfil_identifica_monitor_historico(self):
+        self.monitor_profile.is_active = False
+        self.monitor_profile.save(update_fields=["is_active", "updated_at"])
+        self.semester.is_active = False
+        self.semester.save(update_fields=["is_active", "updated_at"])
+        self.client.force_authenticate(self.monitor)
+
+        response = self.client.get("/api/v1/auth/me/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(response.data["monitor_is_current"])
 
     def test_monitor_solo_puede_ingresar_con_codigo_estudiantil(self):
         login_client = APIClient()

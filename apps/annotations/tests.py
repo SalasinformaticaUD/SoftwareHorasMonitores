@@ -98,7 +98,110 @@ class ManualOvertimeAssignmentTests(APITestCase):
 
         self.client.force_authenticate(self.monitor.user)
         respuesta = self.client.get("/api/v1/annotations/")
+        respuesta_ajena = self.client.get(
+            "/api/v1/annotations/",
+            {"monitor": str(other_monitor.id)},
+        )
 
         self.assertEqual(respuesta.status_code, status.HTTP_200_OK)
         self.assertEqual(len(respuesta.data), 1)
         self.assertEqual(respuesta.data[0]["monitor"], self.monitor.id)
+        self.assertEqual(respuesta_ajena.status_code, status.HTTP_200_OK)
+        self.assertEqual(respuesta_ajena.data, [])
+
+    def test_monitor_antiguo_con_una_monitoria_conserva_sus_anotaciones(self):
+        from apps.annotations.models import Annotation
+
+        old_semester = AcademicSemester.objects.create(
+            name="test-annotations-old-single",
+            is_active=False,
+            starts_on="2025-02-01",
+            ends_on="2025-06-30",
+        )
+        old_user = User.objects.create_user(
+            username="old-monitor-annotations",
+            email="old-monitor-annotations@example.test",
+            password="password",
+            role=UserRoleChoices.MONITOR,
+            department=DepartmentChoices.INFORMATICS_LABS,
+        )
+        old_monitor = Monitor.objects.create(
+            semester=old_semester,
+            user=old_user,
+            codigo_estudiante="20250001",
+            full_name="Monitor antiguo",
+            department=DepartmentChoices.INFORMATICS_LABS,
+            is_active=False,
+        )
+        annotation = Annotation.objects.create(
+            leader=self.admin,
+            monitor=old_monitor,
+            annotation_type=AnnotationTypeChoices.NOVELTY,
+            action=AnnotationActionChoices.NOTE,
+            delta_minutes=0,
+            occurred_on="2025-04-10",
+            description="Anotación histórica",
+            department=old_monitor.department,
+        )
+
+        self.client.force_authenticate(old_user)
+        respuesta = self.client.get("/api/v1/annotations/")
+
+        self.assertEqual(respuesta.status_code, status.HTTP_200_OK)
+        self.assertEqual([item["id"] for item in respuesta.data], [str(annotation.id)])
+
+    def test_monitor_repitente_filtra_anotaciones_por_monitoria_propia(self):
+        from apps.annotations.models import Annotation
+
+        current_annotation = Annotation.objects.create(
+            leader=self.admin,
+            monitor=self.monitor,
+            annotation_type=AnnotationTypeChoices.NOVELTY,
+            action=AnnotationActionChoices.NOTE,
+            delta_minutes=0,
+            occurred_on="2026-09-18",
+            description="Anotación actual",
+            department=self.monitor.department,
+        )
+        previous_semester = AcademicSemester.objects.create(
+            name="test-annotations-repeat-old",
+            is_active=False,
+            starts_on="2025-08-01",
+            ends_on="2025-12-15",
+        )
+        previous_monitor = Monitor.objects.create(
+            semester=previous_semester,
+            user=self.monitor.user,
+            codigo_estudiante=self.monitor.codigo_estudiante,
+            full_name=self.monitor.full_name,
+            department=self.monitor.department,
+            is_active=False,
+        )
+        previous_annotation = Annotation.objects.create(
+            leader=self.admin,
+            monitor=previous_monitor,
+            annotation_type=AnnotationTypeChoices.PERMISSION,
+            action=AnnotationActionChoices.NOTE,
+            delta_minutes=0,
+            occurred_on="2025-09-12",
+            description="Anotación anterior",
+            department=previous_monitor.department,
+        )
+
+        self.client.force_authenticate(self.monitor.user)
+        todas = self.client.get("/api/v1/annotations/")
+        anteriores = self.client.get(
+            "/api/v1/annotations/",
+            {"monitor": str(previous_monitor.id)},
+        )
+
+        self.assertEqual(todas.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            {item["id"] for item in todas.data},
+            {str(current_annotation.id), str(previous_annotation.id)},
+        )
+        self.assertEqual(anteriores.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            [item["id"] for item in anteriores.data],
+            [str(previous_annotation.id)],
+        )

@@ -21,7 +21,11 @@ class AnnotationViewSet(viewsets.ModelViewSet):
         return [IsAdminOrLeader()]
 
     def get_queryset(self):
-        return visible_annotations_for_user(self.request.user)
+        queryset = visible_annotations_for_user(self.request.user)
+        monitoring_id = self.request.query_params.get("monitor")
+        if monitoring_id:
+            queryset = queryset.filter(monitor_id=monitoring_id)
+        return queryset
 
     def perform_destroy(self, instance):
         try:

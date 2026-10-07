@@ -7,6 +7,7 @@
 .mypy_cache
 .pytest_cache
 .pytest_temp
+.pytest_*
 .ruff_cache
 .tmp
 .venv

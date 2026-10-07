@@ -51,6 +51,9 @@ class AttendanceImportJobViewSet(viewsets.ModelViewSet):
                 uploaded_by=self.request.user,
             )
             process_import_job(str(job.id))
+            # process_import_job carga y actualiza otra instancia del trabajo.
+            # Refrescar evita responder con estado pendiente y contadores en cero.
+            job.refresh_from_db()
             serializer.instance = job
         except DjangoValidationError as exc:
             raise exceptions.ValidationError(exc.messages)
